@@ -10,6 +10,7 @@ Built with [Arc Studio](https://studio.arc.io).
 
 ## Features
 
+- **Play as anyone.** Pick from seven characters, girls and guys, and type your own name. Townspeople greet you by it and say "my brother" or "my sister" to match.
 - **Real conversations in Pidgin.** You choose what Ada says. Sellers answer what you ask, say "sir" or "ma", greet by the real time of day, and remember you if you walked away and came back.
 - **A Naija market.** Garri, tomatoes, pepper, onions, yam, plantain and oranges on the stalls; akara frying, suya on the grill, jollof, dodo, pepper soup and chin chin at the food spots. Every seller has their own price.
 - **Bargaining.** Ask the price, make an offer, take a last price or walk away.

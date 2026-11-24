@@ -14,6 +14,8 @@ export interface TalkCtx {
   female: boolean
   /** her name */
   me: string
+  /** the player is a girl (or a guy): changes how people address them */
+  meFemale: boolean
   /** they have met before */
   met: boolean
   /** she has told them her name (now or before) */

@@ -2,6 +2,7 @@ import * as THREE from 'three'
 import { toast } from 'sonner'
 import { spawnNpcs, spawnTraffic, updateNpcs, updateTraffic, type Budget, type Npc, type TrafficCar } from './ambient'
 import { Human, playerLook } from './human'
+import { characterById } from './data'
 import { loadHumanTemplates, type Templates } from './loader'
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js'
 import { DISTRICTS, HOME_NAMES, PROPERTIES, VEHICLES, WORLD, districtAt, levelFromRep } from './data'
@@ -224,7 +225,8 @@ export class Engine {
     this.scene.add(this.pg)
     this.carry = new Carry(this.scene)
     this.wearingRef = getState().wearing
-    this.player = new Human(templates.player, playerLook(this.wearingRef))
+    this.charId = getState().character
+    this.player = this.makePlayer(this.charId)
     this.pg.add(this.player.group)
     this.pg.position.copy(this.pos)
 
@@ -399,9 +401,33 @@ export class Engine {
     }
   }
 
+  /** the chosen character: Ada (her own model and outfits) or one of the realistic townspeople models */
+  private charId = 'ada'
+  private makePlayer(id: string) {
+    const c = characterById(id)
+    const tpl = (c.file && this.templates.byFile[c.file]) || this.templates.player
+    const look = playerLook(this.wearingRef)
+    if (c.file) look.height = c.female ? 1.7 : 1.8
+    const h = new Human(tpl, look)
+    h.play('idle', 0)
+    return h
+  }
+  private swapPlayer(id: string) {
+    this.charId = id
+    const old = this.player
+    const next = this.makePlayer(id)
+    next.group.position.copy(old.group.position)
+    this.pg.remove(old.group)
+    old.dispose()
+    this.player = next
+    this.pg.add(next.group)
+    if (this.riding) this.player.play('drive', 0)
+  }
+
   /* ---------------- store sync ---------------- */
   private onStore() {
     const s = getState()
+    if (s.character !== this.charId) this.swapPlayer(s.character)
     if (s.wearing !== this.wearingRef) {
       this.wearingRef = s.wearing
       this.player.applyLook(playerLook(s.wearing))

@@ -19,7 +19,7 @@ export const NPC_VARIANTS: Record<'female' | 'male', string[]> = {
   male: ['npc_male_1.glb', 'npc_male_2.glb', 'npc_male_3.glb'],
 }
 
-export type Templates = Record<HumanKind, HumanTemplate> & { variants: Record<'female' | 'male', HumanTemplate[]> }
+export type Templates = Record<HumanKind, HumanTemplate> & { variants: Record<'female' | 'male', HumanTemplate[]>; byFile: Record<string, HumanTemplate> }
 
 const base = () => import.meta.env.BASE_URL || '/'
 
@@ -122,6 +122,7 @@ export async function loadHumanTemplates(renderer: THREE.WebGLRenderer, onProgre
   )
   // realistic townspeople: optional, a missing file is simply skipped
   out.variants = { female: [], male: [] }
+  out.byFile = {}
   await Promise.all(
     (['female', 'male'] as const).flatMap((kind) =>
       NPC_VARIANTS[kind].map(async (file) => {
@@ -131,7 +132,11 @@ export async function loadHumanTemplates(renderer: THREE.WebGLRenderer, onProgre
           g.scene.traverse((o) => {
             if ((o as THREE.SkinnedMesh).isSkinnedMesh) skinned = true
           })
-          if (skinned && g.animations.length) out.variants[kind].push({ scene: g.scene, clips: g.animations })
+          if (skinned && g.animations.length) {
+            const tpl = { scene: g.scene, clips: g.animations }
+            out.variants[kind].push(tpl)
+            out.byFile[file] = tpl
+          }
         } catch {
           /* not provided */
         }

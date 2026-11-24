@@ -1,5 +1,5 @@
-import { DEFAULT_OUTFIT, OUTFITS } from '@/game/data'
-import type { Wearing } from '@/game/store'
+import { DEFAULT_OUTFIT, OUTFITS, characterById } from '@/game/data'
+import { useGame, type Wearing } from '@/game/store'
 
 /** Flat portrait of the Wild City PH face: bob, cat-eye glasses, hoops and the signature jacket. */
 export function Avatar({ wearing, size = 200 }: { wearing?: Wearing; size?: number }) {
@@ -99,5 +99,22 @@ export function Avatar({ wearing, size = 200 }: { wearing?: Wearing; size?: numb
       <circle cx="54" cy="132" r="9.5" fill="none" stroke="#e3e8f0" strokeWidth="2.6" />
       <circle cx="146" cy="132" r="9.5" fill="none" stroke="#e3e8f0" strokeWidth="2.6" />
     </svg>
+  )
+}
+
+/** The player's face: Ada's own portrait, or a photo of the character they chose. */
+export function PlayerFace({ wearing, size = 64 }: { wearing?: Wearing; size?: number }) {
+  const id = useGame((s) => s.character)
+  const c = characterById(id)
+  if (!c.file) return <Avatar wearing={wearing} size={size} />
+  return (
+    <img
+      src={`${import.meta.env.BASE_URL}chars/${c.file.replace('.glb', '')}.webp`}
+      alt={c.name}
+      width={size}
+      height={Math.round(size * 1.25)}
+      className="block bg-[#2b1f55] object-cover object-top"
+      style={{ width: size, height: Math.round(size * 1.25) }}
+    />
   )
 }

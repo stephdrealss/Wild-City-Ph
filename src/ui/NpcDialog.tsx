@@ -7,7 +7,7 @@ import type { Fx } from '@/game/dialogue'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Volume2, VolumeX, LogOut } from 'lucide-react'
-import { MARKET_GOODS, OUTFITS, isFood, levelFromRep, type GoodsId } from '@/game/data'
+import { MARKET_GOODS, OUTFITS, characterById, isFood, levelFromRep, type GoodsId } from '@/game/data'
 import {
   HELPED_NODE,
   PERSONAS,
@@ -25,7 +25,7 @@ import { MISSIONS } from '@/game/missions'
 import { addToBag, closeModal, getState, realHour, setState, type Modal, type PortraitLook } from '@/game/store'
 import { voice } from '@/game/voice'
 import { marketPay, usdcFor } from '@/chain/pay'
-import { Avatar } from './Avatar'
+import { PlayerFace } from './Avatar'
 
 type NpcModal = Extract<Modal, { kind: 'npc' }>
 interface Line {
@@ -179,16 +179,31 @@ function haggleFrom(flags: string[]) {
   return id in MARKET_GOODS ? { id: id as GoodsId, price: Number(price) } : undefined
 }
 
-const ME_VOICE = { key: 'player', female: true, pitch: 1.08, rate: 1.0 }
+/** the player's own voice: Ada keeps hers; other characters get a voice to match */
+const meVoice = () => {
+  const c = characterById(getState().character)
+  return c.id === 'ada' ? { key: 'player', female: true, pitch: 1.08, rate: 1.0 } : { key: `player_${c.id}`, female: c.female, pitch: c.female ? 1.06 : 0.92, rate: 1.0 }
+}
 const sleep = (ms: number) => new Promise<void>((r) => window.setTimeout(r, ms))
 const anyOf = <T,>(a: T[]) => a[Math.floor(Math.random() * a.length)]
 
-/** Her name, used when she introduces herself. */
-export const PLAYER_NAME = 'Ada'
+/** The name the player chose on the title screen, used when they introduce themselves. */
+const playerName = () => getState().playerName.trim() || characterById(getState().character).name
+
+/** Townspeople talking to a guy say brother and son, not sister and daughter. */
+function toPlayer(line: string, female: boolean) {
+  if (female) return line
+  return line
+    .replace(/\bmy daughter\b/gi, 'my son')
+    .replace(/\bmadam strong woman\b/gi, 'oga strong man')
+    .replace(/\bmy sister\b/gi, 'my brother')
+    .replace(/\bfine girl\b/gi, 'fine boy')
+}
 const BYE_BACK = ['Okay o, waka well!', 'Na so. See you later, you hear?', 'Take care of yourself o!', 'Alright. No forget me o!']
 
 export function NpcDialog({ m }: { m: NpcModal }) {
   const persona = PERSONAS[m.persona] ?? PERSONAS.marketwoman
+  const ME_VOICE = useRef(meVoice()).current
   const ctx = useRef<DlgCtx>(buildCtx(m)).current
   const first = m.name.split(' ')[0]
   const [muted, setMuted] = useState(() => getState().muted)
@@ -202,7 +217,8 @@ export function NpcDialog({ m }: { m: NpcModal }) {
   const tctx = useRef<TalkCtx>({
     them: first,
     female: m.look.kind === 'female',
-    me: PLAYER_NAME,
+    me: playerName(),
+    meFemale: characterById(getState().character).female,
     met: ctx.met > 0,
     introduced: ctx.met > 0 || ctx.flags.includes('intro'),
     gap: Math.max(0, ctx.day - ctx.lastDay),
@@ -223,7 +239,8 @@ export function NpcDialog({ m }: { m: NpcModal }) {
   )
 
   /** Plays lines one after another: each person finishes talking, a short beat, then the other answers. */
-  const play = async (lines: Line[], fresh = false) => {
+  const play = async (said: Line[], fresh = false) => {
+    const lines = said.map((l) => (l.who === 'npc' ? { ...l, text: toPlayer(l.text, tctx.meFemale) } : l))
     const g = ++gen.current
     setBusy(true)
     // fetch every real voice clip in this exchange at once, so the reply is ready when she finishes
@@ -305,7 +322,7 @@ export function NpcDialog({ m }: { m: NpcModal }) {
       voice.prefetch(o.spoken ?? o.label, ME_VOICE)
       if (o.reply) voice.prefetch(o.reply, npcVoice)
     }
-  }, [options, npcVoice])
+  }, [options, npcVoice, ME_VOICE])
 
   const pickTalk = (t: TalkOption, replyText?: string) => {
     used.add(t.id)
@@ -517,7 +534,7 @@ export function NpcDialog({ m }: { m: NpcModal }) {
               <div key={i} className="flex items-end justify-end gap-2">
                 <p className="max-w-[85%] rounded-2xl rounded-br-md bg-[#ff2d9b] px-3.5 py-2.5 text-[15px] leading-relaxed text-white text-pretty">{text}</p>
                 <div className="shrink-0 overflow-hidden rounded-xl" style={{ width: 28, height: 34 }}>
-                  <Avatar wearing={wearing} size={28} />
+                  <PlayerFace wearing={wearing} size={28} />
                 </div>
               </div>
             )

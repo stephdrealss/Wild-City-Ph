@@ -26,7 +26,7 @@ import {
 } from '@/game/store'
 import { buildAddressExplorerUrl, buildTxExplorerUrl } from '@/onchain-facts'
 import { formatUsdc } from '@/onchain-money'
-import { Avatar } from './Avatar'
+import { PlayerFace } from './Avatar'
 import { Btn, Row, Sheet, Tag } from './kit'
 import { Minimap } from './Minimap'
 
@@ -76,7 +76,7 @@ function JobsTab() {
     <div className="flex flex-col gap-3 pt-1">
       <div className="glass-light flex items-center gap-4 rounded-2xl p-3">
         <div className="w-16 shrink-0 overflow-hidden rounded-2xl">
-          <Avatar wearing={s.wearing} size={64} />
+          <PlayerFace wearing={s.wearing} size={64} />
         </div>
         <div className="text-sm">
           <p className="font-display text-lg font-bold">Reputation level {lvl}</p>

@@ -76,6 +76,9 @@ export interface Wearing {
 }
 
 export interface GameState {
+  /** who she or he plays as (see CHARACTERS) and the name the townspeople call them */
+  character: string
+  playerName: string
   started: boolean
   cash: number
   energy: number
@@ -113,6 +116,8 @@ export interface GameState {
 const SAVE_KEY = 'wildcityph.save.v1'
 const OLD_SAVE_KEY = 'vyrox.save.v1'
 const PERSIST: (keyof GameState)[] = [
+  'character',
+  'playerName',
   'cash',
   'energy',
   'hunger',
@@ -139,6 +144,8 @@ const PERSIST: (keyof GameState)[] = [
 
 const initial: GameState = {
   started: false,
+  character: 'ada',
+  playerName: 'Ada',
   cash: 120,
   energy: 90,
   hunger: 70,

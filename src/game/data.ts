@@ -206,3 +206,23 @@ export const THEME_GOODS: Record<StallTheme, GoodsId[]> = {
   peppersoup: ['peppersoup'],
   chinchin: ['chinchin'],
 }
+
+/** Who you can play as. "ada" is the original character; the others are the realistic townspeople models. */
+export interface PlayableCharacter {
+  id: string
+  name: string
+  female: boolean
+  /** model file in public/models, or null for the main character */
+  file: string | null
+  look: string
+}
+export const CHARACTERS: PlayableCharacter[] = [
+  { id: 'ada', name: 'Ada', female: true, file: null, look: 'Afro puffs, red headphones' },
+  { id: 'tari', name: 'Tari', female: true, file: 'npc_female_1.glb', look: 'Sharp suit, office babe' },
+  { id: 'amaka', name: 'Amaka', female: true, file: 'npc_female_2.glb', look: 'Big curls, ankara top' },
+  { id: 'ibiye', name: 'Ibiye', female: true, file: 'npc_female_3.glb', look: 'Gym fit, short hair' },
+  { id: 'kene', name: 'Kene', female: false, file: 'npc_male_1.glb', look: 'Denim jacket, clean cut' },
+  { id: 'ebuka', name: 'Ebuka', female: false, file: 'npc_male_2.glb', look: 'Hoodie, chilled' },
+  { id: 'jite', name: 'Jite', female: false, file: 'npc_male_3.glb', look: 'Leather jacket, big hair' },
+]
+export const characterById = (id: string) => CHARACTERS.find((c) => c.id === id) ?? CHARACTERS[0]
