@@ -2,7 +2,6 @@ import * as THREE from 'three'
 import { Batch, GLASS_MAT, GLOW, LIT, METAL, PAINT } from './batch'
 
 const TYRE = '#16161a'
-const GLASS = '#9fc4e6'
 
 interface Set {
   paint: Batch

@@ -16,11 +16,6 @@ function basin(b: B, x: number, z: number, rim: string) {
 function heap(b: B, x: number, z: number, color: string, h = 0.16) {
   b.sphere(0.24, color, x, Y + 0.12, z, { sy: h / 0.24 }, 9)
 }
-function pile(b: B, x: number, z: number, r: number, color: string, alt?: string) {
-  // a small pyramid of round things: 4 at the bottom, 1 on top
-  for (const [dx, dz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) b.sphere(r, alt && (dx + dz) % 4 === 0 ? alt : color, x + dx * r * 0.95, Y + 0.12 + r, z + dz * r * 0.95, {}, 7)
-  b.sphere(r, color, x, Y + 0.12 + r * 2.5, z, {}, 7)
-}
 /** "paint rubber" measuring bucket */
 function paintRubber(b: B, x: number, z: number, fill: string) {
   b.cyl(0.13, 0.11, 0.22, '#d62828', x, Y + 0.11, z, 10)

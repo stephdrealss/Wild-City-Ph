@@ -1,49 +1,91 @@
 # Wild City PH
 
-A 3D street-life game set in Wild City, a bright West African-inspired coastal city. Start with nothing, hustle on the streets, buy a ride and a home, open your own shop, and trade properties, vehicles and outfits as NFTs with testnet USDC on Arc Testnet. Playable on desktop and mobile, with a guest mode that needs no wallet.
+A 3D street-life game set in a Port Harcourt-inspired city, where everything you buy is paid in **USDC on Arc Testnet**.
 
-Built with [Arc Studio](https://studio.arc.io)
+Walk into Mile One Market, greet the sellers in Nigerian Pidgin, price the tomatoes, bargain, walk away, come back, then sign a real USDC payment from your wallet. The seller checks her alert, packs your goods into a nylon and hands it over.
+
+**Play:** https://wild-city-ph.vercel.app
+
+Built with [Arc Studio](https://studio.arc.io).
 
 ## Features
 
-- Third-person 3D city with market, plaza, beachfront, residential and downtown districts, day and night, buses, okadas, kekes and street life.
-- Jobs as short mini-games: food delivery, market stall selling, bus conductor, phone repair and night DJ gigs.
-- Needs (energy and hunger), reputation levels that unlock jobs and districts, homes, vehicles, outfits and businesses with passive income.
-- Onchain (Arc Testnet): property, vehicle and outfit NFTs bought with testnet USDC, daily property yield, a player marketplace and a weekly leaderboard. Every onchain action links to the Arc explorer.
-- Realistic-style rigged humans loaded from `.glb` files, with smooth idle, walk, run, jump, sit, talk and driving animations. Varied NPCs (ankara prints, casual wear, work uniforms, market traders) walk routes, chat in groups and react to you. Drop your own models into `public/models/` (see `public/models/README.md`).
-- Sun and soft shadows, PBR materials, detailed buildings, roads, vehicles and market stalls, with level-of-detail for distant people so it stays smooth on phones.
-- Guest mode with in-game cash only. Connect a wallet for ownership, trading and the leaderboard.
+- **Real conversations in Pidgin.** You choose what Ada says. Sellers answer what you ask, say "sir" or "ma", greet by the real time of day, and remember you if you walked away and came back.
+- **A Naija market.** Garri, tomatoes, pepper, onions, yam, plantain and oranges on the stalls; akara frying, suya on the grill, jollof, dodo, pepper soup and chin chin at the food spots. Every seller has their own price.
+- **Bargaining.** Ask the price, make an offer, take a last price or walk away.
+- **USDC payments on Arc.** Buying sends a USDC transfer from your wallet. An in-chat receipt tracks it (sign, sending on Arc, paid) with a link to the transaction on the explorer. Goods are only packed and handed over after the payment lands.
+- **Visible hand-overs.** The seller packs each item into a nylon, ties it and passes it across; you can taste an orange before you buy.
+- **Onchain ownership.** Homes, rides and outfits are NFTs minted with USDC. Properties earn a daily USDC yield. A player marketplace and a weekly leaderboard run on Arc Testnet.
+- **City life.** Okada riders with passengers, keke drivers, buses, cars, realistic townspeople, day and night that follow your real clock, and Wild City FM on the radio (or play your own song).
 
 ## Tech stack
 
-React, TypeScript, Vite, Tailwind CSS, three.js (GLTFLoader, AnimationMixer), wagmi, viem, ConnectKit, Solidity (Foundry, OpenZeppelin).
+React, TypeScript, Vite, Tailwind CSS, three.js, wagmi, viem, ConnectKit, Solidity (Foundry, OpenZeppelin 5), Vercel serverless functions.
 
-## Deploying
+## Getting started
 
-The project builds to static files with `bun run build` (output folder `dist/`). `vercel.json` sets the build command, output folder, caching and single-page routing. Character models in `public/models/` and the texture transcoder in `public/basis/` are copied into the build. Music and sound effects are generated in the browser, so there are no audio files to host. If a model file is missing, the game shows a loading screen note and uses simple placeholder people instead of failing.
-
-## Development
-
-Prerequisites: Bun and Foundry.
+Prerequisites: [Bun](https://bun.sh) and [Foundry](https://getfoundry.sh).
 
 ```bash
 bun install
 bun run dev
 ```
 
-Other scripts: `bun run build` (production build into `dist/`), `bun run preview`, `bun run models:generate` (rebuild the placeholder `.glb` models), `bun run check` (lint and typecheck), `bun run contracts:build`, `bun run contracts:test`.
+| Script | What it does |
+|---|---|
+| `bun run dev` | Start the game locally |
+| `bun run build` | Production build into `dist/` |
+| `bun run preview` | Serve the production build |
+| `bun run check` | Lint and typecheck |
+| `bun run contracts:build` | Compile the Solidity contracts |
+| `bun run contracts:test` | Run the contract tests |
 
 ### Controls
 
-WASD or arrow keys to move, Shift to run, Space to jump, drag to look around, E to interact, V to ride or dismount. On mobile use the joystick and the on-screen buttons.
+WASD or arrow keys to move, Shift to run, Space to jump, drag to look around, E to interact, V to ride or get off. On mobile, use the joystick and the on-screen buttons.
 
-### Environment variables
+## Project layout
 
-All optional. Each holds the address of a deployed contract on Arc Testnet and overrides the built-in default, which already points at the current deployment. This means a static host such as Vercel works without setting any variables.
+```
+src/game/      engine, world, characters, market, conversations, voices, music
+src/ui/        HUD, chat, phone, radio, shops
+src/chain/     contracts, wallet, USDC payments
+api/           serverless functions: voice (Pidgin speech), payout (USDC earnings)
+contracts/     Solidity contracts and tests
+public/models/ characters and animations (.glb)
+```
 
-- `VITE_WILDCITY_PROPERTY`: property NFT contract.
-- `VITE_WILDCITY_VEHICLE`: vehicle NFT contract.
-- `VITE_WILDCITY_OUTFIT`: outfit NFT contract.
-- `VITE_WILDCITY_MARKET`: marketplace contract.
-- `VITE_WILDCITY_LEADERBOARD`: leaderboard contract.
-- `VITE_PLAYER_ASSETS_URL`: base URL for `player.glb` and the animation files. Fallback used when a file is not in `public/models/`. Defaults to the GitHub CDN folder `https://cdn.jsdelivr.net/gh/stephdrealss/wild-city-assets@main/`.
+## Smart contracts (Arc Testnet)
+
+| Contract | Address |
+|---|---|
+| WildCityProperty | `0xae6e416675e1dd9d11b312f5f74b80941f7a152c` |
+| WildCityVehicle | `0x1d2d1720595293ea1879142bf9f9b6c21b191af9` |
+| WildCityOutfit | `0xc2b46156225881b815c3238a4889b01aa9c023b3` |
+| WildCityMarketplace | `0xf95a5ca16cef4e769dc795e088ae9999848c2a1a` |
+| WildCityLeaderboard | `0x0bb80dea57228ccd88eaabcabd39721e613a0a07` |
+| USDC | `0x3600000000000000000000000000000000000000` |
+
+- **Catalog NFTs** (property, vehicle, outfit) are sold for USDC with per-type supply caps. Purchase proceeds stay in each contract; there is no withdrawal function.
+- **Property** proceeds double as the yield pool. Business properties accrue USDC daily (capped at 7 days between claims), and yield earned before a transfer is kept as credit for the seller.
+- **Marketplace** is non-custodial and fee-free: USDC goes straight from buyer to seller.
+- **Leaderboard** scores are self-reported by the game, rate-limited to once an hour per wallet and capped.
+
+Contract tests are in `contracts/test/` (`bun run contracts:test`).
+
+## Environment variables
+
+Set these in Vercel (or `.env` locally). None are required for the game to run.
+
+| Variable | Purpose |
+|---|---|
+| `VITE_WILDCITY_PROPERTY`, `VITE_WILDCITY_VEHICLE`, `VITE_WILDCITY_OUTFIT`, `VITE_WILDCITY_MARKET`, `VITE_WILDCITY_LEADERBOARD` | Override the contract addresses above |
+| `VITE_MARKET_TREASURY` | Wallet that receives USDC from market purchases |
+| `NAIJALINGO_API_KEY` | Turns on Nigerian Pidgin voices (server only) |
+| `PAYOUT_PRIVATE_KEY` | Testnet wallet that pays out players' USDC earnings (server only) |
+
+Never commit keys. `.env` files are ignored by git.
+
+## Credits
+
+See [CREDITS.md](CREDITS.md) and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
