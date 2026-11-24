@@ -24,13 +24,13 @@ export type Templates = Record<HumanKind, HumanTemplate> & { variants: Record<'f
 const base = () => import.meta.env.BASE_URL || '/'
 
 /**
- * Fallback location for the player character and her animation files (player.glb, idle.glb, walk.glb, run.glb, jump.glb,
- * sit.glb, talk.glb). The copies in public/models/ are used first. Override this with VITE_PLAYER_ASSETS_URL. If a file is in
- * neither place, the built-in placeholder human is used.
+ * Optional extra location for the player character and her animation files (player.glb, idle.glb, walk.glb, run.glb,
+ * jump.glb, sit.glb, talk.glb), set with VITE_PLAYER_ASSETS_URL. The copies in public/models/ are always tried first. If a
+ * file is in neither place, the built-in placeholder human is used.
  */
-export const PLAYER_ASSETS_URL = (import.meta.env.VITE_PLAYER_ASSETS_URL as string | undefined)?.replace(/\/+$/, '') || 'https://cdn.jsdelivr.net/gh/stephdrealss/wild-city-assets@main'
+export const PLAYER_ASSETS_URL = (import.meta.env.VITE_PLAYER_ASSETS_URL as string | undefined)?.replace(/\/+$/, '') || ''
 
-const urlsFor = (kind: HumanKind) => (kind === 'player' ? [`${base()}models/${MODEL_FILES[kind]}`, `${PLAYER_ASSETS_URL}/${MODEL_FILES[kind]}`] : [`${base()}models/${MODEL_FILES[kind]}`])
+const urlsFor = (kind: HumanKind) => [`${base()}models/${MODEL_FILES[kind]}`, ...(kind === 'player' && PLAYER_ASSETS_URL ? [`${PLAYER_ASSETS_URL}/${MODEL_FILES[kind]}`] : [])]
 
 /**
  * Loads every human model. GLBs may use KTX2 (Basis) compressed textures and meshopt compression.
@@ -156,7 +156,7 @@ async function addAnimationFiles(tpl: HumanTemplate, load: (url: string) => Prom
   })
   await Promise.all(
     ANIMATION_FILES.map(async (name) => {
-      for (const where of [`${base()}models/`, `${base()}models/animations/`, PLAYER_ASSETS_URL + '/']) {
+      for (const where of [`${base()}models/`, `${base()}models/animations/`, ...(PLAYER_ASSETS_URL ? [PLAYER_ASSETS_URL + '/'] : [])]) {
         const dir = where
         try {
           const g = await load(`${where}${name}.glb`)

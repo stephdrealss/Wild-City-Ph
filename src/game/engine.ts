@@ -324,7 +324,7 @@ export class Engine {
   }
 
   /** paying: she holds up her phone to sign; then the seller checks theirs for the alert */
-  payPhone(who: 'me' | string, on: boolean) {
+  payPhone(who: string, on: boolean) {
     if (who === 'me') return this.carry.showPhone(this.player, on)
     const n = this.npcById(who)
     if (n?.visible) this.carry.showPhone(n.human, on)

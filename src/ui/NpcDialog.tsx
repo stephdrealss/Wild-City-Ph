@@ -69,7 +69,7 @@ function PayCard({ pay }: { pay: NonNullable<Line['pay']> }) {
       </div>
       {tx && (
         <a
-          href={buildTxExplorerUrl(CHAIN_ID, tx.hash as `0x${string}`)}
+          href={buildTxExplorerUrl(CHAIN_ID, tx.hash)}
           target="_blank"
           rel="noopener noreferrer"
           className="tnum mt-2 block truncate text-xs text-[#7be0ff] underline"
@@ -243,8 +243,10 @@ export function NpcDialog({ m }: { m: NpcModal }) {
   // walk up, greet each other, small talk; remember the meeting when the chat closes
   useEffect(() => {
     music.duck(true)
+    const lines = gen
     return () => {
-      gen.current++
+      // stop any line still playing
+      lines.current++
       voice.stop()
       music.duck(false)
       setState((s) => {

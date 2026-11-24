@@ -1,6 +1,6 @@
 # Wild City PH character models
 
-The player character is a Mixamo character (ch03) converted to glTF: `player.glb` holds her skinned mesh with textures resized to 1024 px (WebP), and `idle.glb`, `walk.glb`, `run.glb`, `jump.glb`, `sit.glb`, `talk.glb` hold only the skeleton and one animation clip each. They load from this folder first. If a file is missing here, the game tries the GitHub CDN folder `https://cdn.jsdelivr.net/gh/stephdrealss/wild-city-assets@main/` (set `VITE_PLAYER_ASSETS_URL` to use another), then the built-in placeholder. NPCs always load from this folder.
+The player character is a Mixamo character (ch03) converted to glTF: `player.glb` holds her skinned mesh with textures resized to 1024 px (WebP), and `idle.glb`, `walk.glb`, `run.glb`, `jump.glb`, `sit.glb`, `talk.glb` hold only the skeleton and one animation clip each. They load from this folder first. If a file is missing here, the game tries `VITE_PLAYER_ASSETS_URL` when it is set, then the built-in placeholder. NPCs always load from this folder.
 
 The game loads four rigged humanoid models from this folder with `GLTFLoader`:
 
