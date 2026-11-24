@@ -1,3 +1,6 @@
+import { ConnectKitButton } from 'connectkit'
+import { marketPay, usdcFor } from '@/chain/pay'
+
 import { useState } from 'react'
 import { toast } from 'sonner'
 import {
@@ -16,8 +19,8 @@ import {
   clockText,
   closeModal,
   collectTill,
-  eat,
   fmtCash,
+  fmtPayRange,
   getState,
   homeTier,
   isNight,
@@ -71,12 +74,27 @@ export function PoiPanel({ m }: { m: PoiModal }) {
   }
 }
 
+/** what a plate costs in USDC (the menu is priced in VX; about ₦50 each) */
+const foodUsdc = (vx: number) => usdcFor(vx * 50)
+
 function FoodPanel({ m }: { m: PoiModal }) {
-  const cash = useGame((s) => s.cash)
   const discount = useGame((s) => (s.discount && s.discount.day === s.day ? s.discount.pct : 0))
+  const [busy, setBusy] = useState<string | null>(null)
+  const order = async (f: (typeof FOODS)[number]) => {
+    const usdc = foodUsdc(Math.max(1, Math.round(f.cost * (1 - discount / 100))))
+    setBusy(f.id)
+    const ok = await marketPay.pay(usdc, `Pay ${m.label} ${usdc.toFixed(2)} USDC for ${f.name.toLowerCase()}`)
+    setBusy(null)
+    if (!ok) return
+    setState((s) => ({ hunger: Math.min(100, s.hunger + f.hunger), energy: Math.min(100, s.energy + f.energy) }))
+    toast(`Ate ${f.name}`, { description: `Hunger +${f.hunger}` })
+  }
   return (
-    <Sheet title={m.label} subtitle={discount ? `Fresh and hot. Your ${discount}% bargain discount applies today.` : 'Fresh and hot. Eating restores hunger.'} accent="#ff9f1c">
+    <Sheet title={m.label} subtitle={discount ? `Fresh and hot. Your ${discount}% bargain discount applies today. Pay in USDC.` : 'Fresh and hot. Pay in USDC from your wallet.'} accent="#ff9f1c">
       <div className="flex flex-col gap-2 pt-2">
+        {!marketPay.connected && (
+          <ConnectKitButton.Custom>{({ show }) => <Btn onClick={show}>Connect wallet to pay in USDC</Btn>}</ConnectKitButton.Custom>
+        )}
         {FOODS.map((f) => (
           <Row key={f.id} className="justify-between">
             <div className="min-w-0">
@@ -86,8 +104,8 @@ function FoodPanel({ m }: { m: PoiModal }) {
                 {f.energy ? `, energy +${f.energy}` : ''}
               </p>
             </div>
-            <Btn small variant="gold" disabled={cash < Math.max(1, Math.round(f.cost * (1 - discount / 100)))} onClick={() => eat(f)}>
-              {fmtCash(Math.max(1, Math.round(f.cost * (1 - discount / 100))))}
+            <Btn small variant="gold" disabled={!marketPay.active || !!busy} onClick={() => void order(f)}>
+              {busy === f.id ? 'Paying…' : `${foodUsdc(Math.max(1, Math.round(f.cost * (1 - discount / 100)))).toFixed(2)} USDC`}
             </Btn>
           </Row>
         ))}
@@ -104,7 +122,7 @@ function DeliveryPanel({ m }: { m: PoiModal }) {
       <div className="flex flex-col gap-3 pt-2">
         <div className="glass-light rounded-2xl p-3 text-sm">
           <p>
-            Pay: <b>VX {def.pay}</b> plus a tip for speed.
+            Pay: <b>{fmtPayRange(def.pay)}</b> plus a tip for speed.
           </p>
           <p className="mt-1">
             Walk or ride. A bike makes it much easier. Costs <b>{def.energy} energy</b>.
@@ -139,7 +157,7 @@ function JobGate({ m }: { m: PoiModal }) {
       <div className="flex flex-col gap-3 pt-2">
         <div className="glass-light rounded-2xl p-3 text-sm">
           <p>
-            Pay: <b>VX {def.pay}</b>
+            Pay: <b>{fmtPayRange(def.pay)}</b>
           </p>
           <p className="mt-1">
             Needs reputation level <b>{def.level}</b>. Costs <b>{def.energy} energy</b>.
@@ -186,7 +204,7 @@ function PropertyList({ only }: { only?: number[] }) {
     ownedLocal: p.kind === 'home' ? s.home >= p.tier : s.local.includes(p.id),
     ownedChain: s.chain.includes(p.id),
     tag: p.kind === 'home' ? `Home tier ${p.tier}` : p.kind === 'stall' ? 'Stall' : 'Shop',
-    yieldText: p.hourly ? `Earns VX ${p.hourly} per game hour while you play` : undefined,
+    yieldText: p.hourly ? `Earns ${fmtCash(p.hourly)} per game hour while you play` : undefined,
   }))
   return <AssetList kind="property" rows={rows} onCash={(id) => buyLocal('property', id)} />
 }

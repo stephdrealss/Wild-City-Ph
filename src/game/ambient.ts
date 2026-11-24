@@ -1,15 +1,25 @@
 import * as THREE from 'three'
-import { NPC_LINES, NPC_NAMES, blockCenter } from './data'
+import { FEMALE_NAMES, MALE_NAMES, NPC_LINES, blockCenter, isFood, type StallTheme } from './data'
+import { bubbles } from './bubbles'
+import { PERSONAS } from './dialogue'
+import type { PortraitLook } from './store'
 import { Human, makeImpostor, type HairStyle, type Look } from './human'
 import type { Templates } from './loader'
 import { ankaraTexture } from './textures'
-import { makeBus, makeKeke, makeOkada } from './vehicles'
+import { makeBus, makeCar, makeKeke, makeOkada } from './vehicles'
 import { mulberry, type Spot } from './worldTypes'
 
 export interface Npc {
   id: string
   name: string
   line: string
+  /** personality id from dialogue.ts PERSONAS */
+  persona: string
+  /** what their stall sells, for vendors at a market stall */
+  goods?: StallTheme
+  portrait: PortraitLook
+  /** standing height in metres, for speech bubbles */
+  h: number
   human: Human
   imp: THREE.Mesh
   role: 'walker' | 'vendor' | 'chatter' | 'sitter'
@@ -79,7 +89,8 @@ interface Person {
 
 function makePerson(r: () => number, role: Npc['role']): Person {
   const roll = r()
-  const kind: Kind = roll < 0.09 ? 'child' : r() < 0.52 ? 'female' : 'male'
+  // the people selling are grown-ups
+  const kind: Kind = roll < 0.09 && role !== 'vendor' ? 'child' : r() < 0.52 ? 'female' : 'male'
   const elder = kind !== 'child' && r() < 0.14
   const skin = pick(SKINS, r)
   const look: Look = {
@@ -127,31 +138,66 @@ function makePerson(r: () => number, role: Npc['role']): Person {
   return { kind, look, pace, desc }
 }
 
+const ROLE_PERSONAS: Record<Npc['role'], string[]> = {
+  vendor: ['marketwoman', 'marketwoman', 'mamaput', 'repairer', 'shopowner'],
+  walker: ['okadarider', 'student', 'areaboy', 'pastor', 'shopowner'],
+  chatter: ['areaboy', 'marketwoman', 'student', 'okadarider', 'mamaput'],
+  sitter: ['pastor', 'student', 'areaboy', 'okadarider'],
+}
+
+function personaFor(role: Npc['role'], kind: Kind, r: () => number) {
+  if (kind === 'child') return 'student'
+  return pick(ROLE_PERSONAS[role], r)
+}
+
+/** One short line for a speech bubble, from this person's personality. */
+export function streetLine(n: Npc) {
+  const p = PERSONAS[n.persona]
+  const list = p?.street?.length ? p.street : NPC_LINES
+  return list[Math.floor(Math.random() * list.length)]
+}
+
 export function spawnNpcs(scene: THREE.Group, spots: Spot[], tpl: Templates): Npc[] {
   const r = mulberry(99)
   const npcs: Npc[] = []
   const used = new Set<string>()
-  const name = () => {
+  const name = (female: boolean) => {
+    const list = female ? FEMALE_NAMES : MALE_NAMES
     for (let k = 0; k < 20; k++) {
-      const n = NPC_NAMES[Math.floor(r() * NPC_NAMES.length)]
+      const n = list[Math.floor(r() * list.length)]
       if (!used.has(n)) {
         used.add(n)
         return n
       }
     }
-    return NPC_NAMES[Math.floor(r() * NPC_NAMES.length)]
+    return list[Math.floor(r() * list.length)]
   }
   const add = (role: Npc['role'], x: number, z: number, heading: number, extra: Partial<Npc> = {}) => {
     const person = makePerson(r, role)
-    const human = new Human(tpl[person.kind], person.look)
+    // mostly realistic townspeople when those models are available, with some of the classic ones mixed in
+    const real = person.kind === 'child' ? [] : tpl.variants[person.kind]
+    const useReal = real.length > 0 && r() < 0.92
+    if (useReal) person.look.width = 0.97 + r() * 0.06
+    const human = new Human(useReal ? real[Math.floor(r() * real.length)] : tpl[person.kind], person.look)
     const imp = makeImpostor(person.look.top, person.look.height)
     imp.visible = false
     human.group.visible = false
     scene.add(human.group, imp)
     const npc: Npc = {
       id: `npc-${npcs.length}`,
-      name: name(),
+      name: name(person.kind === 'female' || (person.kind === 'child' && r() < 0.5)),
       line: NPC_LINES[Math.floor(r() * NPC_LINES.length)],
+      persona: personaFor(role, person.kind, r),
+      portrait: {
+        skin: person.look.skin,
+        hair: person.look.hair,
+        hairStyle: person.look.hairStyle,
+        top: person.look.top,
+        accent: person.look.accent,
+        kind: person.kind,
+        elder: person.look.hair === '#cfcfcf',
+      },
+      h: person.look.height ?? 1.7,
       human,
       imp,
       role,
@@ -195,9 +241,12 @@ export function spawnNpcs(scene: THREE.Group, spots: Spot[], tpl: Templates): Np
   let sitters = 0
   for (const sp of spots) {
     if (sp.kind === 'vendor') {
-      if (vendors >= 34 || r() < 0.45) continue
+      // every food spot has its cook; ordinary stalls are filled now and then
+      const food = !!sp.goods && isFood(sp.goods)
+      if (!food && (vendors >= 34 || r() < 0.45)) continue
       vendors++
-      add('vendor', sp.x, sp.z, sp.ry)
+      const v = add('vendor', sp.x, sp.z, sp.ry, sp.goods ? { goods: sp.goods } : {})
+      if (sp.goods) v.npc.persona = food ? 'mamaput' : r() < 0.85 ? 'marketwoman' : 'mamaput'
     } else if (sp.kind === 'chatter') {
       add('chatter', sp.x, sp.z, sp.ry)
     } else if (sp.kind === 'sitter') {
@@ -263,6 +312,7 @@ export function updateNpcs(npcs: Npc[], dt: number, pl: PlayerCtx, budget: Budge
           n.pause = 2.4
           n.talkT = 1.8
           n.cool = 24
+          if (n.tier === 0 && !pl.talkId) bubbles.show(n.human.group, n.h, streetLine(n), 2.6)
         } else if (dist < 6 && pl.speed > 7) {
           n.pause = 1.2
           n.cool = 12
@@ -291,6 +341,8 @@ export function updateNpcs(npcs: Npc[], dt: number, pl: PlayerCtx, budget: Budge
       if (n.beat <= 0) {
         n.speaking = !n.speaking
         n.beat = 3.5 + Math.random() * 4
+        // groups of chatters take turns, so it reads as a real conversation
+        if (n.speaking && n.tier === 0 && !pl.talkId && dist < 24 && !n.talkingToPlayer) bubbles.show(n.human.group, n.h, streetLine(n), 3.2)
       }
       if (n.speaking) n.talkT = Math.max(n.talkT, 0.2)
       if (dist < 4 && !n.talkingToPlayer) n.heading = turn(n.heading, toPlayer, dt * 2)
@@ -316,6 +368,7 @@ export function updateNpcs(npcs: Npc[], dt: number, pl: PlayerCtx, budget: Budge
       if (n.beat <= 0) {
         n.speaking = !n.speaking
         n.beat = n.speaking ? 2 + Math.random() * 2 : 5 + Math.random() * 6
+        if (n.speaking && n.tier === 0 && !pl.talkId && dist < 16 && !n.talkingToPlayer) bubbles.show(n.human.group, n.h, streetLine(n), 2.4)
       }
     }
     h.update(dt, n.tier === 1 ? 1 / 12 : 0)
@@ -333,6 +386,15 @@ export interface TrafficCar {
   cur: number
   x: number
   z: number
+  /** the okada man or keke driver (and sometimes a passenger), holding the handlebar */
+  riders: { h: Human; grips?: [THREE.Vector3, THREE.Vector3] }[]
+  tick: number
+}
+
+/** handlebar grips, in the vehicle's own space: [left hand, right hand] (facing +z, left is +x) */
+const GRIPS = {
+  okada: [new THREE.Vector3(0.36, 1.1, 0.7), new THREE.Vector3(-0.36, 1.1, 0.7)] as [THREE.Vector3, THREE.Vector3],
+  keke: [new THREE.Vector3(0.3, 1.15, 0.4), new THREE.Vector3(-0.3, 1.15, 0.4)] as [THREE.Vector3, THREE.Vector3],
 }
 
 const LOOPS: [number, number][][] = [
@@ -342,19 +404,54 @@ const LOOPS: [number, number][][] = [
   [[25, -50], [175, -50], [175, 100], [25, 100]],
 ]
 
-export function spawnTraffic(scene: THREE.Group): TrafficCar[] {
+export function spawnTraffic(scene: THREE.Group, tpl?: Templates): TrafficCar[] {
   const out: TrafficCar[] = []
   const r = mulberry(404)
-  const make = (kind: 'bus' | 'okada' | 'keke', li: number, phase: number) => {
+  /** a seated person on the vehicle: real townspeople models when loaded */
+  const sitter = (female: boolean, group: THREE.Group, x: number, y: number, z: number) => {
+    if (!tpl) return null
+    let person = makePerson(r, 'walker')
+    for (let k = 0; k < 12 && person.kind !== (female ? 'female' : 'male'); k++) person = makePerson(r, 'walker')
+    if (person.kind === 'child') return null
+    const real = tpl.variants[person.kind]
+    const h = new Human(real.length ? real[Math.floor(r() * real.length)] : tpl[person.kind], person.look)
+    h.group.position.set(x, y - 0.45, z)
+    h.play('drive', 0)
+    h.update(0.01)
+    group.add(h.group)
+    return h
+  }
+  const make = (kind: 'bus' | 'okada' | 'keke' | 'car', li: number, phase: number) => {
     const pts = LOOPS[li].map(([x, z]) => new THREE.Vector2(x, z))
     const lens = pts.map((p, i) => p.distanceTo(pts[(i + 1) % pts.length]))
     const total = lens.reduce((a, b) => a + b, 0)
-    const group = kind === 'bus' ? makeBus() : kind === 'okada' ? makeOkada(r() < 0.5 ? '#ff7a1a' : '#2fb6a3').group : makeKeke(r() < 0.5 ? '#ffd12e' : '#2ec4b6').group
+    const CAR_COLS = ['#c9ccd2', '#1d1f24', '#f2f2f0', '#7a1f24', '#24406b', '#8a8f96']
+    const group =
+      kind === 'bus'
+        ? makeBus()
+        : kind === 'okada'
+          ? makeOkada(r() < 0.5 ? '#ff7a1a' : '#c0392b').group
+          : kind === 'car'
+            ? makeCar(CAR_COLS[Math.floor(r() * CAR_COLS.length)]).group
+            : makeKeke(r() < 0.6 ? '#ffd12e' : '#2ec4b6').group
     group.traverse((o) => {
       if ((o as THREE.Mesh).isMesh) (o as THREE.Mesh).castShadow = true
     })
     scene.add(group)
-    out.push({ group, path: pts, lens, total, s: phase * total, speed: kind === 'bus' ? 7 : kind === 'okada' ? 10 : 8, cur: 0, x: 0, z: 0 })
+    const riders: TrafficCar['riders'] = []
+    if (kind === 'okada') {
+      // okada men are men; half of them are carrying a passenger behind
+      const d = sitter(false, group, 0, 0.88, -0.35)
+      if (d) riders.push({ h: d, grips: GRIPS.okada })
+      if (r() < 0.55) {
+        const p = sitter(r() < 0.6, group, 0, 0.93, -0.72)
+        if (p) riders.push({ h: p })
+      }
+    } else if (kind === 'keke') {
+      const d = sitter(r() < 0.1, group, 0, 0.75, 0.15)
+      if (d) riders.push({ h: d, grips: GRIPS.keke })
+    }
+    out.push({ group, path: pts, lens, total, s: phase * total, speed: kind === 'bus' ? 7 : kind === 'okada' ? 10 : kind === 'car' ? 9 : 8, cur: 0, x: 0, z: 0, riders, tick: r() })
   }
   for (let li = 0; li < 4; li++) {
     make('bus', li, 0.1)
@@ -362,6 +459,8 @@ export function spawnTraffic(scene: THREE.Group): TrafficCar[] {
     make('keke', li, 0.6 + r() * 0.1)
     make('okada', li, 0.85)
     if (li % 2 === 0) make('bus', li, 0.55)
+    make('car', li, 0.22 + r() * 0.05)
+    make('car', li, 0.72 + r() * 0.05)
   }
   return out
 }
@@ -392,5 +491,23 @@ export function updateTraffic(cars: TrafficCar[], dt: number, px: number, pz: nu
     c.group.visible = (x - px) ** 2 + (z - pz) ** 2 < 150 * 150
     c.group.position.set(x, 0, z)
     c.group.rotation.y = Math.atan2(dx, dz)
+    // riders only need posing when someone could see them up close
+    const near = c.group.visible && (x - px) ** 2 + (z - pz) ** 2 < 70 * 70
+    for (const rd of c.riders) rd.h.group.visible = c.group.visible
+    if (near && c.riders.length) {
+      c.tick += dt
+      if (c.tick >= 1 / 15) {
+        c.group.updateMatrixWorld(true)
+        for (const rd of c.riders) {
+          if (rd.grips) {
+            const [lg, rg] = rd.grips
+            rd.h.reachLeft = { target: c.group.localToWorld(lg.clone()), w: 1 }
+            rd.h.reach = { target: c.group.localToWorld(rg.clone()), w: 1 }
+          }
+          rd.h.update(c.tick)
+        }
+        c.tick = 0
+      }
+    }
   }
 }

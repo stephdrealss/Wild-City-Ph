@@ -1,3 +1,4 @@
+import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js'
 import * as THREE from 'three'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 
@@ -64,6 +65,10 @@ export class Batch {
   box(w: number, h: number, d: number, color: string | number, x = 0, y = 0, z = 0, t: Xf = {}) {
     return this.add(new THREE.BoxGeometry(w, h, d), color, x, y, z, t)
   }
+  /** box with rounded edges and corners (car bodies, bumpers) */
+  rbox(w: number, h: number, d: number, r: number, color: string | number, x = 0, y = 0, z = 0, t: Xf = {}) {
+    return this.add(new RoundedBoxGeometry(w, h, d, 3, Math.min(r, w / 2, h / 2, d / 2) * 0.999), color, x, y, z, t)
+  }
   cyl(rt: number, rb: number, h: number, color: string | number, x = 0, y = 0, z = 0, seg = 8, t: Xf = {}) {
     return this.add(new THREE.CylinderGeometry(rt, rb, h, seg), color, x, y, z, t)
   }
@@ -86,6 +91,17 @@ export class Batch {
 
   geometry(): THREE.BufferGeometry | null {
     if (!this.geos.length) return null
+    // rounded boxes come without an index; mixing them with indexed shapes needs everything non-indexed to merge
+    if (this.geos.some((x) => x.index) && this.geos.some((x) => !x.index)) {
+      this.geos = this.geos.map((x) => {
+        if (!x.index) return x
+        const n = x.toNonIndexed()
+        x.dispose()
+        return n
+      })
+    }
+    // every piece must carry the same attributes to merge
+    for (const x of this.geos) if (!x.attributes.uv) x.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(x.attributes.position.count * 2), 2))
     const g = mergeGeometries(this.geos, false)
     this.geos.forEach((x) => x.dispose())
     this.geos = []

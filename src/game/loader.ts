@@ -13,7 +13,13 @@ export const MODEL_FILES: Record<HumanKind, string> = {
   child: 'npc_child.glb',
 }
 
-export type Templates = Record<HumanKind, HumanTemplate>
+/** Realistic townspeople (Mixamo characters). Any that load are mixed in with the regular NPC models. */
+export const NPC_VARIANTS: Record<'female' | 'male', string[]> = {
+  female: ['npc_female_1.glb', 'npc_female_2.glb', 'npc_female_3.glb'],
+  male: ['npc_male_1.glb', 'npc_male_2.glb', 'npc_male_3.glb'],
+}
+
+export type Templates = Record<HumanKind, HumanTemplate> & { variants: Record<'female' | 'male', HumanTemplate[]> }
 
 const base = () => import.meta.env.BASE_URL || '/'
 
@@ -59,7 +65,7 @@ export async function loadHumanTemplates(renderer: THREE.WebGLRenderer, onProgre
 
   const loadUrl = (kind: HumanKind, url: string) =>
     new Promise<HumanTemplate>((resolve, reject) => {
-      const timer = window.setTimeout(() => reject(new Error('timed out')), url.startsWith('http') ? 15000 : 25000)
+      const timer = window.setTimeout(() => reject(new Error('timed out')), url.startsWith('http') ? 15000 : 60000)
       loader.load(
         url,
         (gltf) => {
@@ -113,6 +119,24 @@ export async function loadHumanTemplates(renderer: THREE.WebGLRenderer, onProgre
         report()
       }
     }),
+  )
+  // realistic townspeople: optional, a missing file is simply skipped
+  out.variants = { female: [], male: [] }
+  await Promise.all(
+    (['female', 'male'] as const).flatMap((kind) =>
+      NPC_VARIANTS[kind].map(async (file) => {
+        try {
+          const g = await load2(`${base()}models/${file}`)
+          let skinned = false
+          g.scene.traverse((o) => {
+            if ((o as THREE.SkinnedMesh).isSkinnedMesh) skinned = true
+          })
+          if (skinned && g.animations.length) out.variants[kind].push({ scene: g.scene, clips: g.animations })
+        } catch {
+          /* not provided */
+        }
+      }),
+    ),
   )
   ktx2.dispose()
   return out

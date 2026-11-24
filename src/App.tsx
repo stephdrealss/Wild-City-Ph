@@ -10,6 +10,7 @@ import { Hud } from '@/ui/Hud'
 import { JobOverlay } from '@/ui/JobOverlay'
 import { LoadingScreen } from '@/ui/LoadingScreen'
 import { NpcDialog } from '@/ui/NpcDialog'
+import { MarketPayBridge } from '@/chain/MarketPayBridge'
 import { Phone } from '@/ui/Phone'
 import { PoiPanel } from '@/ui/PoiPanel'
 import { Title } from '@/ui/Title'
@@ -73,6 +74,7 @@ function Game() {
   return (
     <div className="relative h-dvh w-full overflow-hidden bg-[#120f24]">
       <GameCanvas />
+      <MarketPayBridge />
       {playing && <Hud />}
       <AnimatePresence>{!started && load.ready && <Title key="title" />}</AnimatePresence>
       <AnimatePresence>

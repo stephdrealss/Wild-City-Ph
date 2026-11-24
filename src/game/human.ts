@@ -196,6 +196,61 @@ export class Human {
       this.pending = 0
     }
     this.mixer.update(dt)
+    this.applyReach()
+  }
+
+  /** Right arm reaching for a point in the world (weight 0-1), on top of whatever animation is playing. */
+  reach: { target: THREE.Vector3; w: number } | null = null
+  /** Left arm, the same way (holding up her phone) */
+  reachLeft: { target: THREE.Vector3; w: number } | null = null
+  private arms: Partial<Record<'R' | 'L', { upper: THREE.Object3D; fore: THREE.Object3D; hand: THREE.Object3D } | null>> = {}
+  private armOf(side: 'R' | 'L') {
+    if (!(side in this.arms)) {
+      const find = (re: RegExp) => {
+        let f: THREE.Object3D | null = null
+        this.model.traverse((o) => {
+          if (!f && re.test(o.name)) f = o
+        })
+        return f as THREE.Object3D | null
+      }
+      const upper = find(side === 'R' ? /(RightArm|R_UpperArm)$/ : /(LeftArm|L_UpperArm)$/)
+      const fore = find(side === 'R' ? /(RightForeArm|R_Forearm)$/ : /(LeftForeArm|L_Forearm)$/)
+      const hand = find(side === 'R' ? /(RightHand|R_Hand)$/ : /(LeftHand|L_Hand)$/)
+      this.arms[side] = upper && fore && hand ? { upper, fore, hand } : null
+    }
+    return this.arms[side] ?? null
+  }
+  private applyReach() {
+    this.reachArm('R', this.reach)
+    this.reachArm('L', this.reachLeft)
+  }
+  private reachArm(side: 'R' | 'L', r: { target: THREE.Vector3; w: number } | null) {
+    if (!r || r.w <= 0.001) return
+    const arm = this.armOf(side)
+    if (!arm) return
+    const { upper, fore, hand } = arm
+    upper.parent?.updateMatrixWorld(true)
+    const bp = new THREE.Vector3()
+    const hp = new THREE.Vector3()
+    const pq = new THREE.Quaternion()
+    const q = new THREE.Quaternion()
+    // two passes of "point this bone so the hand goes towards the target", forearm then upper arm
+    for (let pass = 0; pass < 2; pass++) {
+      for (const b of [fore, upper]) {
+        b.updateMatrixWorld(true)
+        b.getWorldPosition(bp)
+        hand.getWorldPosition(hp)
+        const from = hp.sub(bp).normalize()
+        const to = r.target.clone().sub(bp).normalize()
+        if (from.lengthSq() < 1e-6 || to.lengthSq() < 1e-6) continue
+        q.setFromUnitVectors(from, to)
+        q.slerp(new THREE.Quaternion(), 1 - Math.min(1, r.w) * (b === fore ? 0.6 : 1))
+        b.parent!.getWorldQuaternion(pq)
+        const local = pq.clone().invert().multiply(q).multiply(pq)
+        b.quaternion.premultiply(local)
+      }
+    }
+    upper.updateMatrixWorld(true)
   }
 
   dispose() {

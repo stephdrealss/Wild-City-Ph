@@ -1,5 +1,6 @@
 import { MISSIONS } from './missions'
 import type { PoiKind } from './store'
+import type { GoodsId } from './data'
 
 /** Branching street conversations. Pure data and helpers, no game state is touched here. */
 
@@ -25,6 +26,12 @@ export interface DlgCtx {
 
 export type Fx =
   | { t: 'cash'; n: number }
+  /** she pays for something she bought in conversation */
+  | { t: 'pay'; n: number }
+  /** pay for market goods and put them in her bag */
+  | { t: 'buy'; id: GoodsId; n: number; naira?: number }
+  /** the seller cuts an orange and gives her a piece to taste */
+  | { t: 'taste' }
   | { t: 'rep'; n: number }
   | { t: 'energy'; n: number }
   | { t: 'hunger'; n: number }
@@ -77,7 +84,7 @@ function reaction(c: DlgCtx) {
   else if (c.level === 0) bits.push(pickBy(['New face, abi?', 'I never see you before o.', 'You be new for this area?'], c))
   else bits.push(pickBy(['I don hear your name small small.', 'People dey talk good things about you.'], c))
   if (c.outfitName) bits.push(pickBy([`See as you shine for that ${c.outfitName}!`, `${c.outfitName}? Chai, you dey look sharp!`], c))
-  else if (c.visit % 2 === 0) bits.push('That pink jacket and those cat-eye glasses, na your signature o!')
+  else if (c.visit % 2 === 0) bits.push('Those hair puffs and that yellow trouser, na your signature o!')
   return bits.join(' ')
 }
 
@@ -233,8 +240,8 @@ const shopowner: Persona = {
         hasDaily(c, 'gig')
           ? 'You don work for me today finish. Come tomorrow, new boxes go land!'
           : c.level >= 2
-            ? 'Big supplier delivery just land. Carry the cartons inside: VX 140. E go tire you small (8 energy).'
-            : 'Carry these boxes enter the store. Na VX 70 and e go cost you 6 energy. Fair?',
+            ? 'Big supplier delivery just land. Carry the cartons inside: 0.70 USDC. E go tire you small (8 energy).'
+            : 'Carry these boxes enter the store. Na 0.35 USDC and e go cost you 6 energy. Fair?',
       choices: [
         { text: 'Do it.', next: 'gigdone', fx: [{ t: 'gig', pay: 70, rep: 2, energy: 6 }, { t: 'flag', f: 'gig', daily: true }], show: (c) => !hasDaily(c, 'gig') && c.level < 2 },
         { text: 'Do it.', next: 'gigdone', fx: [{ t: 'gig', pay: 140, rep: 3, energy: 8 }, { t: 'flag', f: 'gig', daily: true }], show: (c) => !hasDaily(c, 'gig') && c.level >= 2 },
@@ -268,7 +275,7 @@ const areaboy: Persona = {
   ],
   nodes: {
     banter: {
-      say: (c) => (c.outfitName ? `See this one o! ${c.outfitName}? Na you dey set trend for this area!` : 'That pink jacket and glasses? Chai, you be correct baddie. Face of the area!'),
+      say: (c) => (c.outfitName ? `See this one o! ${c.outfitName}? Na you dey set trend for this area!` : 'Those puffs and that headphone? Chai, you be correct baddie. Face of the area!'),
       choices: [
         { text: 'Haha, na so. Respect.', next: 'menu', fx: [{ t: 'rep', n: 1 }, { t: 'flag', f: 'banter', daily: true }], show: (c) => !hasDaily(c, 'banter') },
         { text: 'Hmm, you funny.', next: 'menu' },
@@ -407,7 +414,7 @@ const repairer: Persona = {
   nodes: {
     tip: { say: 'Rule number one: never rush. Watch the light sequence well well, then repeat am slow slow. Na patience dey fix phone.', choices: [back()] },
     work: {
-      say: (c) => (hasDaily(c, 'work') ? 'You don help me today finish. Come tomorrow, new phones go land!' : 'Yes! I get plenty phone for back. Help me sort the screws: VX 90, and e go cost 5 energy.'),
+      say: (c) => (hasDaily(c, 'work') ? 'You don help me today finish. Come tomorrow, new phones go land!' : 'Yes! I get plenty phone for back. Help me sort the screws: 0.45 USDC, and e go cost 5 energy.'),
       choices: [
         { text: 'Do it.', next: 'workdone', fx: [{ t: 'gig', pay: 90, rep: 2, energy: 5 }, { t: 'flag', f: 'work', daily: true }], show: (c) => !hasDaily(c, 'work') },
         back('Later.'),

@@ -1,3 +1,4 @@
+import type { StallTheme } from './data'
 import * as THREE from 'three'
 import type { Batch } from './batch'
 import type { DistrictId } from './data'
@@ -30,6 +31,8 @@ export interface Spot {
   z: number
   ry: number
   kind: 'vendor' | 'chatter' | 'sitter'
+  /** what the stall behind a vendor sells */
+  goods?: StallTheme
 }
 
 export interface Ctx {
@@ -42,6 +45,8 @@ export interface Ctx {
   pois: Poi[]
   drops: { x: number; z: number; district: DistrictId; label: string }[]
   spots: Spot[]
+  /** painted signboards with text (market arch etc.) */
+  signs?: { x: number; y: number; z: number; ry: number; w: number; h: number; text: string; bg: string; fg: string }[]
   rand: () => number
 }
 

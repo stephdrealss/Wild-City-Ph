@@ -3,9 +3,64 @@ import { useEffect, useRef, useState } from 'react'
 import { levelFromRep, repForNext, REP_LEVELS } from '@/game/data'
 import { music } from '@/game/audio'
 import { engineRef } from '@/game/ref'
-import { clockText, fmtCash, isNight, openModal, ownedVehicles, setState, useGame } from '@/game/store'
+import { clockText, fmtCash, isNight, openModal, ownedVehicles, setState, useGame, USDC_PER_CASH } from '@/game/store'
+import { ConnectKitButton } from 'connectkit'
+import { toast } from 'sonner'
+import { useAccount } from 'wagmi'
+import { CHAIN_ID } from '@/chain/contracts'
+import { buildTxExplorerUrl } from '@/onchain-facts'
 import { Bar } from './kit'
 import { Minimap } from './Minimap'
+import { Radio } from './Radio'
+
+/** what she has earned, in USDC, and a button to get it paid into her wallet */
+function Earnings({ cash }: { cash: number }) {
+  const { address, isConnected } = useAccount()
+  const [busy, setBusy] = useState(false)
+  const claim = async () => {
+    if (!address) return
+    setBusy(true)
+    const id = toast.loading(`Sending ${fmtCash(cash)} to your wallet…`)
+    try {
+      const r = await fetch('/api/payout', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ to: address, amount: Math.floor(cash) }) })
+      const j = (await r.json()) as { hash?: string; usdc?: number; paidUnits?: number; error?: string; waitMs?: number }
+      if (r.ok && j.hash) {
+        setState((st) => ({ cash: Math.max(0, st.cash - (j.paidUnits ?? cash)) }))
+        toast.success(`${j.usdc?.toFixed(2)} USDC paid to your wallet`, { id, action: { label: 'View', onClick: () => window.open(buildTxExplorerUrl(CHAIN_ID, j.hash as `0x${string}`), '_blank', 'noopener,noreferrer') } })
+      } else {
+        const why =
+          j.error === 'payouts-off' ? 'Payouts are not switched on yet.' :
+          j.error === 'too-soon' ? `You can claim again in ${Math.ceil((j.waitMs ?? 0) / 60000)} min.` :
+          j.error === 'wallet-empty' ? 'The game payout wallet is empty right now. Try later.' :
+          'Payout did not go through. Try again.'
+        toast.error(why, { id })
+      }
+    } catch {
+      toast.error('Payout did not go through. Try again.', { id })
+    }
+    setBusy(false)
+  }
+  return (
+    <div className="glass flex items-center gap-2 rounded-2xl px-3 py-2">
+      <Banknote size={18} className="text-[#2775ca]" />
+      <span className="font-display tnum text-lg font-bold leading-none">{fmtCash(cash)}</span>
+      {cash * USDC_PER_CASH >= 0.05 &&
+        (isConnected ? (
+          <button disabled={busy} onClick={() => void claim()} className="rounded-xl bg-[#2775ca] px-2.5 py-1 text-xs font-bold disabled:opacity-50">
+            {busy ? '…' : 'Claim'}
+          </button>
+        ) : (
+          <ConnectKitButton.Custom>
+            {({ show }) => (
+              <button onClick={show} className="rounded-xl bg-[#2775ca] px-2.5 py-1 text-xs font-bold">
+                Connect to claim
+              </button>
+            )}
+          </ConnectKitButton.Custom>
+        ))}
+    </div>
+  )
+}
 
 function Stat({ icon, children }: { icon: React.ReactNode; children: React.ReactNode }) {
   return (
@@ -42,9 +97,7 @@ export function Hud() {
     <>
       <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between gap-2 p-3">
         <div className="pointer-events-auto flex flex-col gap-2">
-          <Stat icon={<Banknote size={18} className="text-[#ffd12e]" />}>
-            <span className="font-display tnum text-lg font-bold leading-none">{fmtCash(s.cash)}</span>
-          </Stat>
+          <Earnings cash={s.cash} />
           <div className="glass flex flex-col gap-1.5 rounded-2xl px-3 py-2.5">
             <div className="flex items-center gap-2">
               <Zap size={15} className="text-[#38ffd0]" />
@@ -73,6 +126,7 @@ export function Hud() {
                 {clockText(s.time)} <span className="text-white/55">Day {s.day}</span>
               </span>
             </Stat>
+            <Radio />
             <VolumeControl muted={s.muted} volume={s.volume} />
             <button aria-label="Open phone" onClick={() => openModal({ kind: 'phone', tab: 'jobs' })} className="grid h-11 w-11 place-items-center rounded-2xl bg-[#ff2d9b] shadow-[0_6px_20px_-6px_#ff2d9b]">
               <Smartphone size={19} />

@@ -6,7 +6,10 @@ import { loadHumanTemplates, type Templates } from './loader'
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js'
 import { DISTRICTS, HOME_NAMES, PROPERTIES, VEHICLES, WORLD, districtAt, levelFromRep } from './data'
 import { music } from './audio'
-import { earn, getState, homeTier, ownedVehicles, setState, subscribe, tickClock, type Wearing } from './store'
+import { earn, fmtCash, getState, homeTier, ownedVehicles, setState, subscribe, tickClock, type PoiKind, type Wearing } from './store'
+import { bubbles } from './bubbles'
+import { Carry } from './carry'
+import type { GoodsId } from './data'
 import { makePlayerVehicle, type PlayerVehicle } from './vehicles'
 import { setLoad } from './progress'
 import { buildWorld, type World } from './world'
@@ -53,6 +56,7 @@ export class Engine {
   npcs: Npc[]
   traffic: TrafficCar[]
   pg = new THREE.Group()
+  carry!: Carry
   player: Human
   templates: Templates
   budget: Budget
@@ -115,7 +119,7 @@ export class Engine {
     setLoad({ pct: 76, label: 'Placing people and traffic' })
     await pause()
     const npcs = spawnNpcs(world.group, world.spots, templates)
-    const traffic = spawnTraffic(world.group)
+    const traffic = spawnTraffic(world.group, templates)
     setLoad({ pct: 90, label: 'Lighting the streets' })
     await pause()
     const engine = new Engine(canvas, renderer, templates, mobile, { world, npcs, traffic })
@@ -218,6 +222,7 @@ export class Engine {
 
 
     this.scene.add(this.pg)
+    this.carry = new Carry(this.scene)
     this.wearingRef = getState().wearing
     this.player = new Human(templates.player, playerLook(this.wearingRef))
     this.pg.add(this.player.group)
@@ -289,6 +294,46 @@ export class Engine {
     this.joy.y = y
   }
 
+  /** Closest point of interest of a kind, for directions given in conversation. */
+  nearestPoi(kind: PoiKind) {
+    let best: (typeof this.world.pois)[number] | null = null
+    let bd = Infinity
+    for (const p of this.world.pois) {
+      if (p.kind !== kind) continue
+      const d = Math.hypot(p.x - this.pos.x, p.z - this.pos.z)
+      if (d < bd) {
+        bd = d
+        best = p
+      }
+    }
+    return best
+  }
+
+  /** the seller hands something she bought across to the player */
+  handOver(npcId: string, id: GoodsId, then: () => void, wait = 0) {
+    const n = this.npcById(npcId)
+    if (!n || !n.visible) return then()
+    this.carry.handOver(n.human, this.player, id, then, wait)
+  }
+
+  /** the seller cuts an orange and hands the player half to taste */
+  taste(npcId: string, then: () => void, wait = 0) {
+    const n = this.npcById(npcId)
+    if (!n || !n.visible) return then()
+    this.carry.taste(n.human, this.player, then, wait)
+  }
+
+  /** paying: she holds up her phone to sign; then the seller checks theirs for the alert */
+  payPhone(who: 'me' | string, on: boolean) {
+    if (who === 'me') return this.carry.showPhone(this.player, on)
+    const n = this.npcById(who)
+    if (n?.visible) this.carry.showPhone(n.human, on)
+  }
+
+  npcById(id: string) {
+    return this.npcs.find((n) => n.id === id) ?? null
+  }
+
   interact() {
     const s = getState()
     if (s.modal || !s.started || !this.target) return
@@ -296,7 +341,7 @@ export class Engine {
     if (this.target.type === 'npc') {
       const n = this.target.npc
       n.pause = 4
-      setState({ modal: { kind: 'npc', npcId: n.id, name: n.name, line: n.line, canHelp: n.canHelp } })
+      setState({ modal: { kind: 'npc', npcId: n.id, name: n.name, persona: n.persona, look: n.portrait, canHelp: n.canHelp, goods: n.goods } })
     } else {
       const p = this.target.poi
       setState({ modal: { kind: 'poi', poiId: p.id, poiKind: p.kind, label: p.label, extra: p.extra } })
@@ -437,7 +482,7 @@ export class Engine {
         setState({ delivery: { ...d, phase: 'dropoff', timeLeft } })
       } else {
         const tip = Math.round(Math.max(0, timeLeft) * 0.6)
-        earn(d.reward + tip, 4, `Delivered! ${tip ? `Tip VX ${tip}` : ''}`)
+        earn(d.reward + tip, 4, `Delivered! ${tip ? `Tip ${fmtCash(tip)}` : ''}`)
         music.sfx('jingle')
         setState((st) => ({ delivery: null, jobsDone: st.jobsDone + 1 }))
         this.deliveryTarget = null
@@ -563,6 +608,7 @@ export class Engine {
     const tick = this.tierT <= 0
     if (tick) this.tierT = 0.25
     updateNpcs(this.npcs, dt, { x: this.pos.x, z: this.pos.z, speed: this.speed, riding: this.riding, talkId: this.talkId }, this.budget, tick)
+    bubbles.update(dt)
   }
 
   private animatePlayer(dt: number) {
@@ -576,14 +622,38 @@ export class Engine {
         this.heading = 0
       }
     } else if (!benchNow && this.seated) this.seated = false
-    this.talkId = m?.kind === 'npc' ? m.npcId : null
+    const talkNow = m?.kind === 'npc' ? m.npcId : null
+    if (talkNow && !this.talkId) bubbles.clear()
+    this.talkId = talkNow
+    let approaching = false
+    if (this.talkId) {
+      const n = this.npcById(this.talkId)
+      if (n) {
+        let d = Math.atan2(n.x - this.pos.x, n.z - this.pos.z) - this.heading
+        d = Math.atan2(Math.sin(d), Math.cos(d))
+        this.heading += d * Math.min(1, dt * 6)
+        // walk up to them first, stopping at a natural talking distance
+        const gap = Math.hypot(n.x - this.pos.x, n.z - this.pos.z)
+        if (gap > 1.35 && !this.riding && !this.seated) {
+          const stepLen = Math.min(gap - 1.35, 1.5 * dt)
+          this.pos.x += ((n.x - this.pos.x) / gap) * stepLen
+          this.pos.z += ((n.z - this.pos.z) / gap) * stepLen
+          approaching = true
+        }
+        this.pg.position.set(this.pos.x, this.py, this.pos.z)
+        this.pg.rotation.y = this.heading
+      }
+    }
     const p = this.player
     if (this.riding) p.play('drive', 0.25)
     else if (this.seated) p.play('sit', 0.3)
     else if (this.py > 0.002 || this.vy > 0) p.play('jump', 0.1, 1.4)
+    else if (approaching) p.locomote(1.5)
     else if (this.talkId) p.play('talk', 0.3)
     else p.locomote(this.speed)
     p.update(dt)
+    const bagCount = Object.values(getState().bag).reduce((a, b) => a + (b ?? 0), 0)
+    this.carry.update(dt, p, this.heading, bagCount)
   }
 
   private move(mx: number, mz: number, r: number) {
@@ -642,6 +712,28 @@ export class Engine {
   }
 
   private placeCamera(dt: number, idle: boolean) {
+    const talk = !idle && this.talkId ? this.npcById(this.talkId) : null
+    if (talk) {
+      // conversation two-shot: camera to the side of the pair, framing both faces
+      const mx = (this.pos.x + talk.x) / 2
+      const mz = (this.pos.z + talk.z) / 2
+      let dx = talk.x - this.pos.x
+      let dz = talk.z - this.pos.z
+      const len = Math.hypot(dx, dz) || 1
+      dx /= len
+      dz /= len
+      // stay on whichever side the camera already is, so it swings in instead of flipping
+      const side = -dz * (this.camera.position.x - mx) + dx * (this.camera.position.z - mz) >= 0 ? 1 : -1
+      const tx = mx + -dz * 4.2 * side - dx * 0.8
+      const tz = mz + dx * 4.2 * side - dz * 0.8
+      const k = Math.min(1, dt * 4)
+      this.camera.position.x += (tx - this.camera.position.x) * k
+      this.camera.position.y += (2.1 - this.camera.position.y) * k
+      this.camera.position.z += (tz - this.camera.position.z) * k
+      // aim low so both faces sit in the top half, above the chat panel
+      this.camera.lookAt(mx, 0.55, mz)
+      return
+    }
     const dist = idle ? 5 : this.riding ? 11 + this.speed * 0.15 : 7.5
     const cp = Math.cos(this.pitch)
     const sp = Math.sin(this.pitch)

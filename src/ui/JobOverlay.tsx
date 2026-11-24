@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react'
 import { JOBS, type JobId } from '@/game/data'
 import { music } from '@/game/audio'
-import { closeModal, earn, fmtCash, getState, setState } from '@/game/store'
+import { closeModal, earn, fmtCash, fmtPayRange, getState, setState } from '@/game/store'
 import { Btn, Sheet } from './kit'
 import { BusGame } from './games/BusGame'
 import { DjGame } from './games/DjGame'
@@ -43,7 +43,7 @@ export function JobOverlay({ job }: { job: JobId }) {
         <div className="flex flex-col gap-4 pt-2">
           <div className="glass-light rounded-2xl p-3 text-sm">
             <p>
-              Pay: <b>VX {def.pay}</b> depending on how well you do.
+              Pay: <b>{fmtPayRange(def.pay)}</b> depending on how well you do.
             </p>
             <p className="mt-1">
               Costs <b>{def.energy} energy</b> and earns reputation.

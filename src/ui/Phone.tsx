@@ -5,12 +5,14 @@ import { BOARD, CHAIN_ID, COLLECTIONS, MARKET, short } from '@/chain/contracts'
 import { useOwned, useUsdcBalance } from '@/chain/hooks'
 import { refetchOwned } from '@/chain/sync'
 import { useRunTx, useTxLog } from '@/chain/tx'
-import { DISTRICTS, JOBS, OUTFITS, PROPERTIES, REP_LEVELS, VEHICLES, levelFromRep } from '@/game/data'
+import { DISTRICTS, JOBS, MARKET_GOODS, OUTFITS, PROPERTIES, REP_LEVELS, VEHICLES, levelFromRep, type GoodsId } from '@/game/data'
 import { engineRef } from '@/game/ref'
 import {
+  eatFromBag,
   closeModal,
   collectTill,
   fmtCash,
+  fmtPayRange,
   homeTier,
   netWorth,
   openModal,
@@ -103,7 +105,7 @@ function JobsTab() {
               <p className="text-sm text-white/65">{j.blurb}</p>
               <p className="mt-0.5 text-xs text-white/55">Find it: {WHERE[j.id]}</p>
             </div>
-            <span className="tnum shrink-0 text-sm font-bold text-[#ffd12e]">VX {j.pay}</span>
+            <span className="tnum shrink-0 text-sm font-bold text-[#ffd12e]">{fmtPayRange(j.pay)}</span>
           </Row>
         )
       })}
@@ -139,10 +141,27 @@ function InventoryTab() {
     props: ownedProperties(g),
     home: homeTier(g),
     till: Math.floor(Object.values(g.till).reduce((a, b) => a + b, 0)),
+    bag: g.bag,
   }))
   const slot = (c: number) => (['outfit', 'hair', 'acc'] as const)[c]
+  const bagItems = (Object.entries(s.bag) as [GoodsId, number][]).filter(([, n]) => n > 0)
   return (
     <div className="flex flex-col gap-3 pt-1">
+      <p className="text-xs font-bold uppercase tracking-wider text-white/50">Market bag</p>
+      {bagItems.length === 0 && <p className="text-sm text-white/60">Empty. Buy garri, tomatoes, yam and more from the market women.</p>}
+      {bagItems.map(([id, n]) => (
+        <Row key={id} className="justify-between">
+          <span className="min-w-0">
+            <span className="block font-bold">
+              {MARKET_GOODS[id].name} <span className="tnum text-white/60">×{n}</span>
+            </span>
+            <span className="block text-xs text-white/55">Hunger +{MARKET_GOODS[id].hunger}</span>
+          </span>
+          <Btn small variant="teal" onClick={() => eatFromBag(id)}>
+            {MARKET_GOODS[id].use}
+          </Btn>
+        </Row>
+      ))}
       <p className="text-xs font-bold uppercase tracking-wider text-white/50">Vehicles</p>
       {s.vehicles.length === 0 && <p className="text-sm text-white/60">No vehicle yet. Zoom Motors in Wild City Plaza sells them.</p>}
       {s.vehicles.map((id) => (
@@ -192,7 +211,7 @@ function InventoryTab() {
         .map((id) => (
           <Row key={id} className="justify-between">
             <span className="font-bold">{PROPERTIES[id].name}</span>
-            <span className="tnum text-sm text-white/70">VX {PROPERTIES[id].hourly}/hr</span>
+            <span className="tnum text-sm text-white/70">{fmtCash(PROPERTIES[id].hourly)}/hr</span>
           </Row>
         ))}
       {s.till > 0 && (

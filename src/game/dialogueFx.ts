@@ -1,7 +1,9 @@
 import { toast } from 'sonner'
 import type { DlgCtx, Fx } from './dialogue'
 import { engineRef } from './ref'
-import { completeMission, earn, fmtCash, getState, setState, startMission } from './store'
+import { MARKET_GOODS } from './data'
+import { marketPay, usdcFor } from '@/chain/pay'
+import { addToBag, completeMission, earn, fmtCash, getState, setState, spend, startMission } from './store'
 
 /** Applies the game effects of a dialogue choice: tips, discounts, gigs, directions, missions. */
 export function applyFx(list: Fx[] | undefined, ctx: DlgCtx) {
@@ -10,6 +12,40 @@ export function applyFx(list: Fx[] | undefined, ctx: DlgCtx) {
       case 'cash':
         earn(f.n, 0, `${ctx.name} gave you ${fmtCash(f.n)}`)
         break
+      case 'pay':
+        if (spend(f.n)) toast(`You paid ${fmtCash(f.n)}`, { description: `To ${ctx.name}` })
+        break
+      case 'buy':
+        // with a wallet connected, the seller is paid in real testnet USDC on Arc
+        if (marketPay.active) {
+          const usdc = usdcFor(f.n * 100)
+          const id = f.id
+          void marketPay.pay(usdc, `Pay ${ctx.name} ${usdc.toFixed(2)} USDC for ${MARKET_GOODS[id].name.toLowerCase()}`).then((ok) => {
+            if (!ok) return
+            const e = engineRef.current
+            if (e) e.handOver(ctx.npcId, id, () => addToBag(id), 0.3)
+            else addToBag(id)
+          })
+          break
+        }
+        if (spend(f.n)) {
+          // she sees it change hands: from the seller's hand to hers, then into her nylon bag
+          const e = engineRef.current
+          // a beat for her to finish speaking and the seller to answer "here, collect"
+          if (e) e.handOver(ctx.npcId, f.id, () => addToBag(f.id), 2.6)
+          else addToBag(f.id)
+        }
+        break
+      case 'taste': {
+        const e = engineRef.current
+        const enjoy = () => {
+          setState((st) => ({ energy: Math.min(100, st.energy + 3), hunger: Math.min(100, st.hunger + 2) }))
+          toast.success('Sweet orange!', { description: 'Energy +3' })
+        }
+        if (e) e.taste(ctx.npcId, enjoy, 2.4)
+        else enjoy()
+        break
+      }
       case 'rep':
         earn(0, f.n, 'Respect earned')
         break

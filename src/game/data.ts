@@ -126,10 +126,16 @@ export const NPC_LINES = [
   'Try the suya near the plaza, it is the best in town.',
   'Reputation opens doors in Wild City. Do good work.',
 ]
-export const NPC_NAMES = [
-  'Ada', 'Kofi', 'Amara', 'Tunde', 'Zainab', 'Femi', 'Efua', 'Kwame', 'Chidi', 'Naledi', 'Sade', 'Yaw', 'Imani', 'Ayo', 'Nneka',
-  'Kojo', 'Abena', 'Seun', 'Folake', 'Musa',
+/** names by who they are, so a woman is never called Tunde */
+export const FEMALE_NAMES = [
+  'Amara', 'Zainab', 'Ngozi', 'Chioma', 'Blessing', 'Ifeoma', 'Ibiere', 'Sade', 'Nneka', 'Folake', 'Tamuno', 'Ebiere', 'Precious', 'Joy',
+  'Adaeze', 'Ufuoma', 'Nkechi', 'Bisola', 'Mercy', 'Grace',
 ]
+export const MALE_NAMES = [
+  'Tunde', 'Femi', 'Chidi', 'Ibuka', 'Emeka', 'Obinna', 'Dagogo', 'Tonye', 'Soye', 'Ebi', 'Seun', 'Musa', 'Ayo', 'Ikenna', 'Godwin',
+  'Ibinabo', 'Uche', 'Kelechi', 'Sunday', 'Boma',
+]
+export const NPC_NAMES = [...FEMALE_NAMES, ...MALE_NAMES]
 
 export const BLOCK = 50
 export const HALF = 20
@@ -148,3 +154,55 @@ export function districtOfBlock(i: number, j: number): DistrictId {
   return 'plaza'
 }
 export const blockCenter = (i: number, j: number) => ({ x: (i - 3) * 50, z: (j - 2.5) * 50 })
+
+/* ---------------- real market goods ---------------- */
+/** cooked food, sold hot from the food spots */
+export type FoodId = 'akara' | 'suya' | 'jollof' | 'dodo' | 'peppersoup' | 'chinchin'
+export type GoodsId = 'garri' | 'rice' | 'beans' | 'palmoil' | 'tomato' | 'pepper' | 'onion' | 'yam' | 'plantain' | 'orange' | FoodId
+export type StallTheme = 'foodstuff' | 'veg' | 'tuber' | 'fruit' | FoodId
+export const isFood = (t: string): t is FoodId => ['akara', 'suya', 'jollof', 'dodo', 'peppersoup', 'chinchin'].includes(t)
+
+export interface GoodsDef {
+  id: GoodsId
+  name: string
+  /** how it is sold, as the seller says it */
+  unit: string
+  /** price in naira, as said in conversation (1 VX = ₦100) */
+  naira: number
+  /** what she can do with it from her bag */
+  use: string
+  hunger: number
+  energy: number
+}
+
+export const MARKET_GOODS: Record<GoodsId, GoodsDef> = {
+  garri: { id: 'garri', name: 'Garri', unit: 'one paint rubber', naira: 1500, use: 'Soak garri and drink', hunger: 25, energy: 2 },
+  rice: { id: 'rice', name: 'Rice', unit: 'one mudu', naira: 1800, use: 'Cook rice', hunger: 30, energy: 2 },
+  beans: { id: 'beans', name: 'Beans', unit: 'one mudu', naira: 1600, use: 'Cook beans', hunger: 30, energy: 3 },
+  palmoil: { id: 'palmoil', name: 'Palm oil', unit: 'one bottle', naira: 1200, use: 'Cook with palm oil', hunger: 8, energy: 1 },
+  tomato: { id: 'tomato', name: 'Tomatoes', unit: 'one small basket', naira: 4000, use: 'Make tomato stew', hunger: 15, energy: 1 },
+  pepper: { id: 'pepper', name: 'Pepper', unit: 'one bowl', naira: 800, use: 'Add pepper to your food', hunger: 4, energy: 3 },
+  onion: { id: 'onion', name: 'Onions', unit: 'one bowl', naira: 1000, use: 'Cook with onions', hunger: 5, energy: 1 },
+  yam: { id: 'yam', name: 'Yam', unit: 'one tuber', naira: 2500, use: 'Boil yam', hunger: 35, energy: 3 },
+  plantain: { id: 'plantain', name: 'Plantain', unit: 'one bunch', naira: 2000, use: 'Fry plantain (dodo)', hunger: 25, energy: 2 },
+  orange: { id: 'orange', name: 'Oranges', unit: 'five for', naira: 500, use: 'Eat an orange', hunger: 6, energy: 6 },
+  akara: { id: 'akara', name: 'Akara', unit: 'ten pieces', naira: 1000, use: 'Eat akara', hunger: 22, energy: 4 },
+  suya: { id: 'suya', name: 'Suya', unit: 'one wrap', naira: 2500, use: 'Eat suya', hunger: 28, energy: 5 },
+  jollof: { id: 'jollof', name: 'Jollof rice', unit: 'one pack with chicken', naira: 3000, use: 'Eat jollof rice', hunger: 40, energy: 4 },
+  dodo: { id: 'dodo', name: 'Dodo', unit: 'one wrap', naira: 1200, use: 'Eat dodo', hunger: 20, energy: 4 },
+  peppersoup: { id: 'peppersoup', name: 'Pepper soup', unit: 'one bowl with goat meat', naira: 3500, use: 'Drink pepper soup', hunger: 30, energy: 8 },
+  chinchin: { id: 'chinchin', name: 'Chin chin', unit: 'one pack', naira: 500, use: 'Eat chin chin', hunger: 10, energy: 3 },
+}
+
+export const THEME_GOODS: Record<StallTheme, GoodsId[]> = {
+  foodstuff: ['garri', 'rice', 'beans', 'palmoil'],
+  veg: ['tomato', 'pepper', 'onion'],
+  tuber: ['yam', 'plantain'],
+  fruit: ['orange', 'plantain'],
+  akara: ['akara'],
+  suya: ['suya'],
+  jollof: ['jollof'],
+  dodo: ['dodo'],
+  peppersoup: ['peppersoup'],
+  chinchin: ['chinchin'],
+}

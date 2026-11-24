@@ -23,7 +23,17 @@ import {
   tower,
   tree,
   umbrella,
+  zincShed,
+  groundMat,
+  marketUmbrella,
+  wheelbarrow,
+  plasticChairs,
+  generatorSet,
+  sackPile,
+  marketArch,
+  cookStall,
 } from './props'
+import type { FoodId } from './data'
 import type { Ctx } from './worldTypes'
 
 const GLASS = ['#8fb3ff', '#6fd3c8', '#d7a6ff', '#ffd1a6', '#f2f6ff', '#9fe0ff']
@@ -33,9 +43,18 @@ const ROOFS = ['#d62828', '#f77f00', '#6a4c93', '#1982c4', '#8ac926']
 
 const cell = (n: number) => n * 12
 
+/** the food a spot is named for is the food cooked and sold there */
+const FOOD_OF: Record<string, FoodId> = {
+  'Jollof Corner': 'jollof',
+  'Suya Spot': 'suya',
+  'Plantain Queen': 'dodo',
+  'Akara Hut': 'akara',
+  'Pepper Soup Stand': 'peppersoup',
+  'Chin Chin Cart': 'chinchin',
+}
+
 function foodStall(c: Ctx, id: string, x: number, z: number, ry: number, label: string) {
-  stall(c, x, z, ry, '#e63946', '#ffe3a3', true)
-  c.solid.cyl(0.35, 0.4, 0.5, '#2b2b2b', x + 0.6, 1.2, z + 0.3, 8)
+  cookStall(c, x, z, ry, FOOD_OF[label] ?? 'jollof')
   c.glow.box(1.4, 0.3, 0.06, '#ff9f1c', x, 3.1, z + 1.2)
   const f = front(x, z, ry, 2.2)
   addPoi(c, id, 'food', label, f.x, f.z, undefined, true)
@@ -100,13 +119,32 @@ function marketBlock(c: Ctx, i: number, j: number, cx: number, cz: number) {
     foodStall(c, 'food-f', cx, cz + P(1), 0, 'Chin Chin Cart')
     put(0, 1)
   }
+  // an open Nigerian market: zinc-roof sheds, stalls under big umbrellas, women selling from mats on the ground
   for (let gx = -1; gx <= 1; gx++)
     for (let gz = -1; gz <= 1; gz++) {
       if (skip.has(`${gx},${gz}`)) continue
       const x = cx + cell(gx) + (c.rand() - 0.5) * 1.5
       const z = cz + cell(gz) + 1
-      stall(c, x, z, c.rand() < 0.5 ? 0 : Math.PI, pickc(c), '#ffffff', c.rand() < 0.15)
+      const roll = c.rand()
+      if (roll < 0.34) {
+        zincShed(c, x, z, c.rand() < 0.5 ? 0 : Math.PI, 9)
+      } else if (roll < 0.62) {
+        const ry = c.rand() < 0.5 ? 0 : Math.PI
+        stall(c, x, z, ry, pickc(c), '#ffffff', c.rand() < 0.15)
+        marketUmbrella(c, x + 2.6, z + 2.2)
+      } else {
+        groundMat(c, x - 1.4, z, 0)
+        groundMat(c, x + 1.6, z + 0.6, Math.PI)
+        marketUmbrella(c, x + 0.1, z + 0.3)
+      }
+      // everyday market clutter
+      const k = c.rand()
+      if (k < 0.25) wheelbarrow(c, x + 4.2, z - 3.5, c.rand() * 3)
+      else if (k < 0.45) sackPile(c, x - 4.3, z - 3.6)
+      else if (k < 0.6) plasticChairs(c, x + 4.5, z + 4.2)
+      else if (k < 0.7) generatorSet(c, x - 4.6, z + 4.4)
     }
+  if (i === 1 && j === 2) marketArch(c, cx, cz + 17.8, 0, 'MILE ONE MARKET')
   if (c.rand() < 0.7) {
     c.spots.push({ x: cx + 6, z: cz + 6.5 + (id.length % 2), ry: Math.PI / 2, kind: 'chatter' })
     c.spots.push({ x: cx + 7.3, z: cz + 6.5 + (id.length % 2), ry: -Math.PI / 2, kind: 'chatter' })

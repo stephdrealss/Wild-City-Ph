@@ -65,7 +65,7 @@ export class Bubbles {
       const tex = new THREE.CanvasTexture(canvas)
       tex.colorSpace = THREE.SRGBColorSpace
       const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, fog: false }))
-      sprite.scale.set(3.4, 3.4 * (H / W), 1)
+      sprite.scale.set(2.3, 2.3 * (H / W), 1)
       sprite.visible = false
       sprite.renderOrder = 10
       e = { sprite, canvas, tex, host: null, left: 0 }

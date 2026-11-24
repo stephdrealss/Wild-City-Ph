@@ -10,3 +10,5 @@ contracts/out
 contracts/cache
 *.log
 .DS_Store
+.vercel
+.env*

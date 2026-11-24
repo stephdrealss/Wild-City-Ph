@@ -1,3 +1,4 @@
+import { silentWav } from './voice'
 /**
  * Procedural audio (Web Audio, no files): afrobeats loop, street ambience (market chatter,
  * car horns, keke putter), footsteps and UI/gameplay sound effects.
@@ -19,6 +20,18 @@ type Sfx = 'coin' | 'ok' | 'bad' | 'tap' | 'click' | 'jingle' | 'jump' | 'land' 
 
 const midi = (n: number) => 440 * Math.pow(2, (n - 69) / 12)
 
+export type Station = 'mix' | 'amapiano' | 'afrobeats' | 'highlife' | 'mine' | 'off'
+const STATIONS: Station[] = ['mix', 'amapiano', 'afrobeats', 'highlife', 'off']
+function loadStation(): Station {
+  try {
+    const v = localStorage.getItem('wildcity-station') as Station | null
+    if (v && STATIONS.includes(v)) return v
+  } catch {
+    /* storage unavailable */
+  }
+  return 'mix'
+}
+
 class AudioEngine {
   private ctx: AudioContext | null = null
   private master!: GainNode
@@ -38,6 +51,88 @@ class AudioEngine {
   private started = false
   muted = false
   volume = 0.8
+  private duckLevel = 1
+  /** which radio station is playing */
+  station: Station = loadStation()
+  private mine: HTMLAudioElement | null = null
+  mineName = ''
+  mineError = false
+  private listeners = new Set<() => void>()
+
+  onChange(fn: () => void) {
+    this.listeners.add(fn)
+    return () => this.listeners.delete(fn)
+  }
+  private emit() {
+    for (const f of this.listeners) f()
+  }
+
+  setStation(st: Station) {
+    this.station = st
+    try {
+      if (st !== 'mine') localStorage.setItem('wildcity-station', st)
+    } catch {
+      /* storage unavailable */
+    }
+    if (st === 'mine') {
+      this.mineVolume()
+      void this.mine?.play().catch(() => {})
+    }
+    else this.mine?.pause()
+    this.setScene(this.scene)
+    this.emit()
+  }
+
+  /**
+   * Called on the tap that opens the song picker. Phones only let audio start from a direct tap, and picking a file is
+   * not one, so the player element is unlocked here with a moment of silence first.
+   */
+  primeOwnSong() {
+    if (!this.mine) {
+      this.mine = new Audio()
+      this.mine.loop = true
+      this.mine.setAttribute('playsinline', '')
+    }
+    if (!this.mine.src.startsWith('blob:')) {
+      this.mine.src = silentWav()
+      void this.mine.play().catch(() => {})
+    }
+    this.unlock()
+  }
+
+  /** Play a song the player picked from their own device. It never leaves their phone. */
+  playOwnSong(file: File) {
+    this.primeOwnSong()
+    if (!this.mine) return
+    if (this.mine.src.startsWith('blob:')) URL.revokeObjectURL(this.mine.src)
+    this.mine.src = URL.createObjectURL(file)
+    this.mine.loop = true
+    this.mineName = file.name.replace(/\.[a-z0-9]+$/i, '')
+    this.mineError = false
+    // a file the phone cannot play (a video, a document...) says so instead of failing silently
+    this.mine.onerror = () => {
+      if (!this.mine?.src.startsWith('blob:')) return
+      this.mineError = true
+      this.mineName = ''
+      this.setStation('mix')
+    }
+    this.unlock()
+    this.setStation('mine')
+  }
+
+  private mineVolume() {
+    if (!this.mine) return
+    this.mine.volume = this.muted || this.station !== 'mine' ? 0 : Math.min(1, this.volume * 0.85 * this.duckLevel)
+  }
+
+  /** Turn the music down while people are talking, and back up after. */
+  duck(on: boolean) {
+    this.duckLevel = on ? 0.35 : 1
+    this.mineVolume()
+    // iPhones pause one sound when another starts (the voices), so pick her song back up after the chat
+    if (!on && this.station === 'mine' && this.mine?.paused && this.mine.src.startsWith('blob:')) void this.mine.play().catch(() => {})
+    this.setScene(this.scene)
+  }
 
   /** Begin audio after the player clicks Play or connects a wallet. */
   start() {
@@ -62,6 +157,7 @@ class AudioEngine {
   }
 
   private applyMaster() {
+    this.mineVolume()
     if (!this.ctx) return
     this.master.gain.setTargetAtTime(this.muted ? 0 : this.volume, this.ctx.currentTime, 0.05)
   }
@@ -187,9 +283,11 @@ class AudioEngine {
     const ctx = this.ctx
     if (!ctx || !this.started) return
     const t = ctx.currentTime
-    const music = this.muted ? 0 : 0.24 + s.shop * 0.34
+    const synthOn = this.station !== 'off' && this.station !== 'mine'
+    const music = this.muted || !synthOn ? 0 : (0.42 + s.shop * 0.3) * this.duckLevel
+    this.mineVolume()
     this.musicGain.gain.setTargetAtTime(music, t, 0.4)
-    this.musicFilter.frequency.setTargetAtTime(900 + s.shop * 3000 + (1 - s.night) * 600, t, 0.4)
+    this.musicFilter.frequency.setTargetAtTime(2600 + s.shop * 3000 + (1 - s.night) * 800, t, 0.4)
     this.chatter.gain.setTargetAtTime(0.05 * s.market, t, 0.5)
     this.putter.gain.setTargetAtTime(0.1 * s.traffic * s.traffic, t, 0.4)
     this.ride.gain.setTargetAtTime(s.riding ? 0.07 + Math.min(0.08, s.rideSpeed * 0.005) : 0, t, 0.2)
@@ -321,6 +419,86 @@ class AudioEngine {
     o.stop(t + 0.24)
   }
 
+  /** Amapiano log drum: a pitched, punchy low note that slides down into place. */
+  private logDrum(t: number, f: number, vol = 0.55) {
+    const ctx = this.ctx!
+    const o = ctx.createOscillator()
+    const o2 = ctx.createOscillator()
+    const g = ctx.createGain()
+    o.type = 'sine'
+    o2.type = 'triangle'
+    o.frequency.setValueAtTime(f * 1.9, t)
+    o.frequency.exponentialRampToValueAtTime(f, t + 0.05)
+    o2.frequency.setValueAtTime(f * 3.8, t)
+    o2.frequency.exponentialRampToValueAtTime(f * 2, t + 0.05)
+    g.gain.setValueAtTime(0.0001, t)
+    g.gain.linearRampToValueAtTime(vol, t + 0.006)
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.42)
+    const g2 = ctx.createGain()
+    g2.gain.value = 0.18
+    o.connect(g)
+    o2.connect(g2)
+    g2.connect(g)
+    g.connect(this.musicFilter)
+    o.start(t)
+    o2.start(t)
+    o.stop(t + 0.45)
+    o2.stop(t + 0.45)
+  }
+
+  /** Soft electric-piano chord with a slow fade, the warm amapiano keys. */
+  private keys(t: number, notes: number[], dur: number, vol = 0.05) {
+    for (const n of notes) {
+      this.tone(t, midi(n), dur, 'triangle', vol)
+      this.tone(t + 0.004, midi(n + 12), dur * 0.6, 'sine', vol * 0.35)
+    }
+  }
+
+  /** 112 bpm afro-amapiano: four-to-the-floor kick, log drum riffs, 16th shakers, off-beat hats and lazy piano chords. */
+  private amapiano(t: number, s: number, bar: number) {
+    const roots = [45, 43, 41, 43] // Am, G, F, G
+    const chords = [[57, 60, 64, 67], [55, 59, 62, 66], [53, 57, 60, 64], [55, 59, 62, 65]]
+    if (s % 4 === 0) this.kick(t)
+    // shaker on every 16th, accented off-beats
+    this.hit(t, 8000, 0.03, s % 4 === 2 ? 0.12 : 0.06)
+    // open hat on the off-beat
+    if (s % 4 === 2) this.hit(t, 6000, 0.12, 0.07)
+    // clap on 2 and 4
+    if (s === 4 || s === 12) {
+      this.hit(t, 1500, 0.16, 0.34)
+      this.hit(t + 0.015, 3200, 0.1, 0.18)
+    }
+    // log drum riff, changes on alternate bars
+    const r = roots[bar]
+    const riff = bar % 2 === 0 ? [0, -1, -1, 0, -1, -1, 7, -1, -1, 0, -1, 12, -1, -1, 10, -1] : [0, -1, -1, 0, -1, -1, 7, -1, 0, -1, 3, -1, 5, -1, 7, -1]
+    const n = riff[s]
+    if (n >= 0) this.logDrum(t, midi(r - 12 + n))
+    // piano chords: long on 1, short pushes after
+    if (s === 0) this.keys(t, chords[bar], 1.1)
+    if (s === 6 || s === 11) this.keys(t, chords[bar], 0.35, 0.035)
+    // little vocal-ish flute line every 4th bar
+    if (bar === 3 && [0, 2, 4, 7, 10].includes(s)) this.tone(t, midi([76, 74, 72, 74, 69][[0, 2, 4, 7, 10].indexOf(s)]), 0.3, 'sine', 0.06)
+  }
+
+  /** 120 bpm highlife: bright guitar picking, bell pattern, walking bass, soft congas. */
+  private highlife(t: number, s: number, bar: number) {
+    const roots = [48, 53, 55, 48] // C, F, G, C
+    const triads = [[60, 64, 67], [65, 69, 72], [67, 71, 74], [60, 64, 67]]
+    // bell (gankogui-style) pattern
+    if ([0, 2, 4, 5, 7, 9, 11].includes(s % 12)) this.tone(t, midi(s % 12 === 0 ? 84 : 91), 0.08, 'square', 0.03)
+    if (s % 8 === 0) this.kick(t)
+    if (s % 4 === 2) this.hit(t, 2500, 0.08, 0.12, 6000)
+    this.hit(t, 8000, 0.025, s % 2 ? 0.04 : 0.07)
+    // guitar picking through the chord
+    const tri = triads[bar]
+    const pick = [0, 1, 2, 1, 0, 2, 1, 2][s % 8]
+    if (s % 2 === 0) this.tone(t, midi(tri[pick] + 12), 0.22, 'triangle', 0.07)
+    if (s === 6 || s === 14) this.tone(t, midi(tri[2] + 12), 0.18, 'triangle', 0.05)
+    // walking bass
+    const walk = [0, -1, -1, -1, 4, -1, -1, -1, 7, -1, -1, -1, 9, -1, 7, -1][s]
+    if (walk >= 0) this.tone(t, midi(roots[bar] - 12 + walk), 0.3, 'triangle', 0.3)
+  }
+
   /** 104 bpm afrobeats: syncopated kick, clap on 2 and 4, shaker, clave, rolling bass and chord stabs. */
   private schedule() {
     const ctx = this.ctx
@@ -328,7 +506,6 @@ class AudioEngine {
       if (ctx) this.next = Math.max(this.next, ctx.currentTime + 0.05)
       return
     }
-    const stepDur = 60 / 104 / 4
     const roots = [45, 41, 48, 43] // A, F, C, G
     const chords = [[57, 60, 64], [53, 57, 60], [55, 60, 64], [55, 59, 62]]
     const pent = [0, 3, 5, 7, 10, 12, 15]
@@ -336,6 +513,26 @@ class AudioEngine {
       const t = this.next
       const s = this.step % 16
       const bar = Math.floor(this.step / 16) % 4
+      const st = this.station
+      if (st === 'off' || st === 'mine') {
+        this.next += 60 / 112 / 4
+        this.step++
+        continue
+      }
+      if (st === 'highlife') {
+        this.highlife(t, s, bar)
+        this.next += 60 / 120 / 4
+        this.step++
+        continue
+      }
+      // the mix plays 16 bars of amapiano, then 8 of afrobeats, round and round
+      const amapiano = st === 'amapiano' || (st === 'mix' && Math.floor(this.step / 16) % 24 < 16)
+      if (amapiano) {
+        this.amapiano(t, s, bar)
+        this.next += 60 / 112 / 4
+        this.step++
+        continue
+      }
       if (s === 0 || s === 7 || s === 10 || (s === 14 && bar % 2 === 1)) this.kick(t)
       if (s === 4 || s === 12) {
         this.hit(t, 1400, 0.14, 0.4)
@@ -352,7 +549,7 @@ class AudioEngine {
         const n = pent[(this.step * 3 + s) % pent.length]
         this.tone(t, midi(69 + n), 0.18, 'sine', 0.09)
       }
-      this.next += stepDur
+      this.next += 60 / 104 / 4
       this.step++
     }
   }

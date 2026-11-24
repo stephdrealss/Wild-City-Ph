@@ -17,7 +17,7 @@ export interface World {
 }
 
 const FLOOR: Record<string, string> = {
-  market: '#e8b57e',
+  market: '#c98f5f',
   plaza: '#eadfc8',
   beach: '#f3e2ac',
   residential: '#a8d98a',
@@ -266,6 +266,27 @@ export function buildWorld(): World {
       )
     return mats.get(k)!
   }
+  // painted signboards (market arch and the like)
+  for (const sg of ctx.signs ?? []) {
+    const cv = document.createElement('canvas')
+    cv.width = 1024
+    cv.height = Math.round((1024 * sg.h) / sg.w)
+    const g2 = cv.getContext('2d')!
+    g2.fillStyle = sg.bg
+    g2.fillRect(0, 0, cv.width, cv.height)
+    g2.fillStyle = sg.fg
+    g2.font = `900 ${Math.round(cv.height * 0.62)}px "Space Grotesk", "Arial Black", sans-serif`
+    g2.textAlign = 'center'
+    g2.textBaseline = 'middle'
+    g2.fillText(sg.text, cv.width / 2, cv.height / 2 + 4, cv.width - 40)
+    const tex = new THREE.CanvasTexture(cv)
+    tex.colorSpace = THREE.SRGBColorSpace
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(sg.w, sg.h), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.8 }))
+    m.position.set(sg.x, sg.y, sg.z)
+    m.rotation.y = sg.ry
+    group.add(m)
+  }
+
   for (const p of ctx.pois) {
     const g = new THREE.Group()
     g.position.set(p.x, 0, p.z)

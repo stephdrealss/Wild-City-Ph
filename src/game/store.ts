@@ -11,7 +11,10 @@ import {
   SECONDS_PER_HOUR,
   VEHICLES,
   levelFromRep,
+  MARKET_GOODS,
   type FoodDef,
+  type GoodsId,
+  type StallTheme,
   type JobId,
 } from './data'
 
@@ -52,7 +55,7 @@ export type PhoneTab = 'jobs' | 'map' | 'inventory' | 'wallet'
 
 export type Modal =
   | { kind: 'phone'; tab: PhoneTab }
-  | { kind: 'npc'; npcId: string; name: string; persona: string; look: PortraitLook; canHelp: boolean }
+  | { kind: 'npc'; npcId: string; name: string; persona: string; look: PortraitLook; canHelp: boolean; goods?: StallTheme }
   | { kind: 'poi'; poiId: string; poiKind: PoiKind; label: string; extra?: number }
   | { kind: 'job'; job: JobId }
   | null
@@ -95,6 +98,8 @@ export interface GameState {
   voiceOn: boolean
   npcMemory: Record<string, NpcMemory>
   missions: Record<string, 'active' | 'done'>
+  /** market goods she has bought, by id */
+  bag: Partial<Record<GoodsId, number>>
   discount: { pct: number; day: number } | null
   guide: { label: string; x: number; z: number } | null
   chain: { properties: number[]; vehicles: number[]; outfits: number[] }
@@ -128,6 +133,7 @@ const PERSIST: (keyof GameState)[] = [
   'voiceOn',
   'npcMemory',
   'missions',
+  'bag',
   'discount',
 ]
 
@@ -137,7 +143,7 @@ const initial: GameState = {
   energy: 90,
   hunger: 70,
   rep: 0,
-  time: 8,
+  time: realHour(),
   day: 1,
   homeLocal: 0,
   vehiclesLocal: [],
@@ -153,6 +159,7 @@ const initial: GameState = {
   voiceOn: true,
   npcMemory: {},
   missions: {},
+  bag: {},
   discount: null,
   guide: null,
   chain: { properties: [], vehicles: [], outfits: [] },
@@ -250,7 +257,12 @@ export function netWorth(s: GameState) {
   for (const id of ownedOutfits(s)) w += OUTFITS[id]?.cash ?? 0
   return Math.floor(w)
 }
-export const fmtCash = (n: number) => `VX ${Math.floor(n).toLocaleString('en-US')}`
+/** what she earns is paid out in USDC: game amounts convert at 200 per USDC */
+export const USDC_PER_CASH = 0.005
+export const cashUsdc = (n: number) => Math.floor(n) * USDC_PER_CASH
+export const fmtCash = (n: number) => `${cashUsdc(n).toFixed(2)} USDC`
+/** "60 to 160" in game amounts, as USDC */
+export const fmtPayRange = (r: string | number) => String(r).replace(/\d+/g, (d) => (Number(d) * USDC_PER_CASH).toFixed(2)) + ' USDC'
 export const clockText = (t: number) => {
   const h = Math.floor(t) % 24
   const m = Math.floor((t % 1) * 60)
@@ -306,11 +318,10 @@ export function sleepHome(): boolean {
   setState((st) => ({
     energy: Math.min(100, Math.max(st.energy, 0) + restore),
     hunger: Math.max(10, st.hunger - 18),
-    time: 7,
-    day: st.time > 7 ? st.day + 1 : st.day,
+    day: st.day + 1,
     modal: null,
   }))
-  toast.success(`Slept at your ${HOME_NAMES[tier]}`, { description: 'Energy restored. Good morning, Wild City.' })
+  toast.success(`Slept at your ${HOME_NAMES[tier]}`, { description: 'Energy restored.' })
   return true
 }
 
@@ -367,6 +378,13 @@ export function jobUnlocked(job: JobId, rep: number) {
 
 /* ---------- clock + needs (called by engine every frame) ---------- */
 let acc = 0
+/** the clock on the phone: morning in the game when it is morning where she is playing */
+export function realHour() {
+  const d = new Date()
+  return d.getHours() + d.getMinutes() / 60
+}
+/** play time still counts days (needs, rent, business takings run faster than real time) */
+let dayAcc = 0
 const pend = { hours: 0, hunger: 0, energy: 0, till: {} as Record<number, number> }
 export function tickClock(dt: number, riding: boolean) {
   acc += dt
@@ -387,15 +405,17 @@ export function tickClock(dt: number, riding: boolean) {
   pend.energy = 0
   pend.till = {}
   setState((s) => {
-    const t = s.time + d.hours
+    dayAcc += d.hours
+    const days = Math.floor(dayAcc / 24)
+    dayAcc -= days * 24
     const till = { ...s.till }
     for (const k of Object.keys(d.till)) {
       const id = Number(k)
       till[id] = Math.min(PROPERTIES[id].hourly * 24, (till[id] ?? 0) + d.till[id])
     }
     return {
-      time: t % 24,
-      day: s.day + Math.floor(t / 24),
+      time: realHour(),
+      day: s.day + days,
       hunger: Math.min(100, Math.max(0, s.hunger + d.hunger)),
       energy: Math.min(100, Math.max(0, s.energy + d.energy)),
       till,
@@ -417,4 +437,22 @@ export function completeMission(id: string) {
   if (!m || getState().missions[id] !== 'active') return
   setState((s) => ({ missions: { ...s.missions, [id]: 'done' } }))
   earn(m.cash, m.rep, `Mission complete: ${m.title}`)
+}
+
+/* ---------- market goods in her bag ---------- */
+export function addToBag(id: GoodsId, n = 1) {
+  setState((s) => ({ bag: { ...s.bag, [id]: (s.bag[id] ?? 0) + n } }))
+  toast.success(`${MARKET_GOODS[id].name} added to your bag`, { description: 'Open your phone → Items to use it.' })
+}
+
+export function eatFromBag(id: GoodsId) {
+  const s = getState()
+  if (!s.bag[id]) return
+  const g = MARKET_GOODS[id]
+  setState((st) => ({
+    bag: { ...st.bag, [id]: Math.max(0, (st.bag[id] ?? 0) - 1) },
+    hunger: Math.min(100, st.hunger + g.hunger),
+    energy: Math.min(100, st.energy + g.energy),
+  }))
+  toast.success(g.use, { description: `Hunger +${g.hunger}${g.energy ? ` · Energy +${g.energy}` : ''}` })
 }

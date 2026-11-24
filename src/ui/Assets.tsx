@@ -7,7 +7,6 @@ import { CHAIN_ID, COLLECTIONS, USDC_ADDRESS, type CatalogItem, type Kind } from
 import { approveStep, useCatalog } from '@/chain/hooks'
 import { refetchOwned } from '@/chain/sync'
 import { useRunTx } from '@/chain/tx'
-import { fmtCash } from '@/game/store'
 import { formatUsdc } from '@/onchain-money'
 import { Btn, Tag } from './kit'
 
@@ -64,7 +63,8 @@ export interface AssetRow {
   yieldText?: string
 }
 
-export function AssetList({ kind, rows, onCash }: { kind: Kind; rows: AssetRow[]; onCash: (id: number) => void }) {
+/** homes, rides and outfits are bought in USDC only: minted onchain on Arc */
+export function AssetList({ kind, rows }: { kind: Kind; rows: AssetRow[]; onCash?: (id: number) => void }) {
   const cat = useCatalog(kind, rows.length)
   return (
     <div className="flex flex-col gap-2.5 pt-2">
@@ -92,11 +92,7 @@ export function AssetList({ kind, rows, onCash }: { kind: Kind; rows: AssetRow[]
                   <Check size={11} className="mr-1 inline" />
                   Yours
                 </Tag>
-              ) : (
-                <Btn small variant="gold" onClick={() => onCash(r.id)}>
-                  {fmtCash(r.cash)}
-                </Btn>
-              )}
+              ) : null}
               <MintButton kind={kind} item={item} owned={r.ownedChain} />
               {r.extra}
             </div>
